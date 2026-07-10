@@ -2,13 +2,15 @@ import React, { useState } from 'react';
 import { useGame } from '../../contexts/GameContext.jsx';
 import { useVoice } from '../../contexts/VoiceContext.jsx';
 import { motion, AnimatePresence } from 'framer-motion';
+import { playClickSound, playHoverSound, setMuted } from '../../audio/audioEngine.js';
+import RoomExploration from './RoomExploration.jsx';
 import AudioRenderer from '../common/AudioRenderer.jsx';
-import { setMuted } from '../../audio/audioEngine.js';
 
 export default function GameScreen() {
   const { state, actions } = useGame();
   const { isMuted, toggleMute, micError } = useVoice();
   const [activeTab, setActiveTab] = useState('role'); // role, location, suspects, timeline, clues
+  const [phase, setPhase] = useState('briefing'); // briefing | exploring
   const [musicMuted, setMusicMuted] = useState(false);
 
   const toggleMusic = () => {
@@ -34,6 +36,12 @@ export default function GameScreen() {
     );
   }
 
+  // ── Room Exploration Phase ──
+  if (phase === 'exploring') {
+    return <RoomExploration />;
+  }
+
+  // ── Briefing Phase ──
   const tabs = [
     { id: 'role', label: 'Your Role' },
     { id: 'location', label: 'The Location' },
@@ -227,6 +235,33 @@ export default function GameScreen() {
             </motion.div>
           )}
         </AnimatePresence>
+      </div>
+
+      {/* ── Enter the Mansion Button ── */}
+      <div
+        className="px-6 py-5 border-t flex items-center justify-center"
+        style={{ borderColor: 'rgba(139, 0, 0, 0.3)', background: 'rgba(5, 3, 2, 0.95)' }}
+      >
+        <button
+          onClick={() => { playClickSound(); setPhase('exploring'); }}
+          onMouseEnter={playHoverSound}
+          className="relative overflow-hidden group transition-all duration-500"
+          style={{
+            fontFamily: 'var(--font-family-heading), Cinzel, serif',
+            fontSize: '1.1rem',
+            letterSpacing: '0.2em',
+            textTransform: 'uppercase',
+            color: '#d4c5a9',
+            background: 'linear-gradient(180deg, rgba(30,20,15,0.9) 0%, rgba(15,10,8,0.95) 100%)',
+            border: '1px solid rgba(139, 0, 0, 0.5)',
+            padding: '1rem 3rem',
+            cursor: 'pointer',
+            textShadow: '0 0 15px rgba(139, 0, 0, 0.6)',
+            boxShadow: '0 0 25px rgba(139, 0, 0, 0.2), inset 0 0 15px rgba(139, 0, 0, 0.05)',
+          }}
+        >
+          ⚰️ Enter the Mansion
+        </button>
       </div>
 
       <AudioRenderer />

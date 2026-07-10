@@ -1,3 +1,5 @@
+import { DEFAULT_ROOMS } from '../config/rooms.js';
+
 export async function generateMysteryData(players) {
   const playerCount = players.length;
   
@@ -8,6 +10,7 @@ REQUIREMENTS:
 - There must be EXACTLY ${playerCount} suspects (these correspond to the players).
 - The murderer must be chosen randomly among the suspects (it must make narrative sense).
 - HORROR TWIST: Weave in a supernatural red herring (e.g., rumors of a ghost, cursed manor). Clues may initially point toward paranormal activity, but the true solution MUST be logical (human-committed). The horror comes from atmosphere and misdirection.
+- ROOMS & CLUES: Populate specific, atmospheric horror-themed descriptions and clues for the mansion's rooms.
 
 OUTPUT FORMAT MUST BE STRICT JSON matching this schema:
 {
@@ -41,6 +44,20 @@ OUTPUT FORMAT MUST BE STRICT JSON matching this schema:
     {
       "name": "string",
       "description": "string (e.g., a broken watch, a muddy footprint)"
+    }
+  ],
+  "rooms": [
+    {
+      "id": "string (MUST be one of: hallway, library, study, kitchen, garden, dining_room)",
+      "name": "string (e.g., 'Dusty Library')",
+      "description": "string (detailed spooky description)",
+      "clues": [
+        {
+          "name": "string (clue name)",
+          "description": "string (what the clue reveals)",
+          "isSupernatural": "boolean"
+        }
+      ]
     }
   ],
   "murderer": "string (MUST EXACTLY MATCH one of the suspect names)",
@@ -86,7 +103,12 @@ DO NOT include any markdown formatting, markdown blocks, or plain text outside t
       if (cleanResponse.startsWith('```')) {
         cleanResponse = cleanResponse.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
       }
-      return JSON.parse(cleanResponse);
+      const mystery = JSON.parse(cleanResponse);
+      
+      // Merge AI generated room data with static DEFAULT_ROOMS config
+      mystery.rooms = mergeRooms(mystery.rooms);
+      
+      return mystery;
     } catch (parseError) {
       console.error('Failed to parse JSON from Ollama. Raw response:', data.response);
       throw parseError;
@@ -96,6 +118,25 @@ DO NOT include any markdown formatting, markdown blocks, or plain text outside t
     // Return a fallback mystery if generation fails
     return getFallbackMystery(playerCount);
   }
+}
+
+function mergeRooms(aiRooms) {
+  const mergedRooms = [];
+
+  for (const defaultRoom of DEFAULT_ROOMS) {
+    const aiRoom = Array.isArray(aiRooms) ? aiRooms.find(r => r && r.id === defaultRoom.id) : null;
+    
+    mergedRooms.push({
+      id: defaultRoom.id,
+      name: aiRoom?.name || defaultRoom.name,
+      description: aiRoom?.description || defaultRoom.description,
+      position: defaultRoom.position,
+      connections: defaultRoom.connections,
+      clues: Array.isArray(aiRoom?.clues) ? aiRoom.clues : []
+    });
+  }
+
+  return mergedRooms;
 }
 
 function getFallbackMystery(playerCount) {
@@ -115,10 +156,39 @@ function getFallbackMystery(playerCount) {
     })),
     timeline: [{ time: "23:00", event: "The lights went out." }],
     initialClues: [{ name: "Shattered Glass", description: "Found near the body." }],
+    rooms: DEFAULT_ROOMS.map(room => ({
+      ...room,
+      clues: getFallbackCluesForRoom(room.id)
+    })),
     murderer: "Guest 1",
     motive: "Money.",
     method: "Poison.",
     opportunity: "Was alone with the victim's drink.",
     hiddenEvents: [{ trigger: "Investigate study", eventDescription: "A painting falls off the wall." }]
   };
+}
+
+function getFallbackCluesForRoom(roomId) {
+  const cluesByRoom = {
+    hallway: [
+      { name: "Flickering Chandelier", description: "The chain appears rusted through, almost as if deliberately cut.", isSupernatural: false }
+    ],
+    library: [
+      { name: "Tattered Diary Entry", description: "Spooky ramblings mentioning shadows that move on their own.", isSupernatural: true }
+    ],
+    study: [
+      { name: "Unsent Blackmail Letter", description: "A threatening note written by Guest 1 targeting the victim's debts.", isSupernatural: false }
+    ],
+    kitchen: [
+      { name: "Empty Vials of Cyanide", description: "Hidden behind the rotting wooden drawers.", isSupernatural: false }
+    ],
+    garden: [
+      { name: "Cracked Gravestone", description: "The glowing soil surrounding it hums with eerie, otherworldly whispers.", isSupernatural: true }
+    ],
+    dining_room: [
+      { name: "Tipped Wine Glass", description: "A white residue is visible on the rim, smelling faintly of almonds.", isSupernatural: false }
+    ]
+  };
+
+  return cluesByRoom[roomId] || [];
 }
