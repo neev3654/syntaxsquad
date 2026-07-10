@@ -380,6 +380,12 @@ export default function setupSocketHandlers(io) {
           return callback?.({ success: false, error: 'At least 2 souls are needed...' });
         }
 
+        // Ensure all non-host players are ready
+        const notReadyPlayers = connectedPlayers.filter(p => !p.isReady && !p.isHost);
+        if (notReadyPlayers.length > 0) {
+          return callback?.({ success: false, error: 'All souls must be ready to begin...' });
+        }
+
         room.status = 'countdown';
         await room.save();
 

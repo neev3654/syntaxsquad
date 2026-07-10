@@ -57,13 +57,19 @@ function Lobby() {
                     actions.setReady(!myPlayer.isReady);
                   }}
                   onMouseEnter={playHoverSound}
-                  className="horror-btn text-lg px-12 py-5"
+                  className="horror-btn text-lg px-12 py-5 relative overflow-hidden group"
                   style={{
-                    borderColor: myPlayer.isReady ? 'rgba(74, 158, 74, 0.6)' : 'rgba(139, 0, 0, 0.4)',
-                    color: myPlayer.isReady ? '#4ea366' : '#fff'
+                    borderColor: myPlayer.isReady ? 'rgba(255, 60, 60, 0.6)' : 'rgba(74, 158, 74, 0.8)',
+                    backgroundColor: myPlayer.isReady ? 'rgba(255, 60, 60, 0.1)' : 'rgba(74, 158, 74, 0.15)',
+                    color: myPlayer.isReady ? '#ff4d4d' : '#4ea366',
+                    boxShadow: myPlayer.isReady ? '0 0 10px rgba(255,60,60,0.2)' : '0 0 15px rgba(74,158,74,0.3)',
+                    transition: 'all 0.3s ease'
                   }}
                 >
-                  {myPlayer.isReady ? 'ready' : 'not ready'}
+                  <span className="absolute inset-0 w-full h-full bg-white opacity-0 group-hover:opacity-10 transition-opacity duration-300 pointer-events-none"></span>
+                  <span className="relative z-10 font-bold uppercase tracking-wider">
+                    {myPlayer.isReady ? 'Not Ready' : 'Ready'}
+                  </span>
                 </button>
               )}
 
@@ -75,15 +81,18 @@ function Lobby() {
                     actions.startGame();
                   }}
                   onMouseEnter={playHoverSound}
-                  disabled={connectedPlayers.length < 2}
+                  disabled={connectedPlayers.length < 2 || connectedPlayers.some(p => !p.isReady && !p.isHost)}
                   className="horror-btn text-lg px-12 py-5"
                   style={{
-                    borderColor: connectedPlayers.length >= 2 ? 'rgba(184, 134, 11, 0.5)' : 'rgba(139, 0, 0, 0.15)'
+                    borderColor: connectedPlayers.length >= 2 && !connectedPlayers.some(p => !p.isReady && !p.isHost) ? 'rgba(184, 134, 11, 0.5)' : 'rgba(139, 0, 0, 0.15)',
+                    opacity: connectedPlayers.length >= 2 && !connectedPlayers.some(p => !p.isReady && !p.isHost) ? 1 : 0.6
                   }}
                 >
                   {connectedPlayers.length < 2 
                     ? `waiting for ${2 - connectedPlayers.length} more` 
-                    : 'start game'}
+                    : connectedPlayers.some(p => !p.isReady && !p.isHost)
+                      ? 'waiting for players to be ready'
+                      : 'start game'}
                 </button>
               )}
 

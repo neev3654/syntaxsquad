@@ -40,6 +40,15 @@ function gameReducer(state, action) {
       return { ...state, kicked: true, screen: 'menu', room: null, roomCode: null };
     case 'RESET':
       return { ...initialState, isConnected: state.isConnected, screen: 'menu' };
+    case 'ADD_CHAT_MESSAGE':
+      if (!state.room) return state;
+      return {
+        ...state,
+        room: {
+          ...state.room,
+          messages: [...(state.room.messages || []), action.payload]
+        }
+      };
     default:
       return state;
   }
@@ -90,6 +99,10 @@ export function GameProvider({ children }) {
       dispatch({ type: 'RESET' });
     });
 
+    socket.on('chat-message', (message) => {
+      dispatch({ type: 'ADD_CHAT_MESSAGE', payload: message });
+    });
+
     return () => {
       socket.off('connect');
       socket.off('disconnect');
@@ -99,6 +112,7 @@ export function GameProvider({ children }) {
       socket.off('game-started');
       socket.off('kicked');
       socket.off('room-closed');
+      socket.off('chat-message');
     };
   }, []);
 
