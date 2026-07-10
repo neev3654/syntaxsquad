@@ -127,15 +127,15 @@ function Lobby() {
                     actions.startGame();
                   }}
                   onMouseEnter={playHoverSound}
-                  disabled={connectedPlayers.length < 2 || connectedPlayers.some(p => !p.isReady && !p.isHost)}
+                  disabled={connectedPlayers.length < room.maxPlayers || connectedPlayers.some(p => !p.isReady && !p.isHost)}
                   className="horror-btn text-lg px-12 py-5"
                   style={{
-                    borderColor: connectedPlayers.length >= 2 && !connectedPlayers.some(p => !p.isReady && !p.isHost) ? 'rgba(184, 134, 11, 0.5)' : 'rgba(139, 0, 0, 0.15)',
-                    opacity: connectedPlayers.length >= 2 && !connectedPlayers.some(p => !p.isReady && !p.isHost) ? 1 : 0.6
+                    borderColor: connectedPlayers.length >= room.maxPlayers && !connectedPlayers.some(p => !p.isReady && !p.isHost) ? 'rgba(184, 134, 11, 0.5)' : 'rgba(139, 0, 0, 0.15)',
+                    opacity: connectedPlayers.length >= room.maxPlayers && !connectedPlayers.some(p => !p.isReady && !p.isHost) ? 1 : 0.6
                   }}
                 >
-                  {connectedPlayers.length < 2 
-                    ? `waiting for ${2 - connectedPlayers.length} more` 
+                  {connectedPlayers.length < room.maxPlayers 
+                    ? `waiting for ${room.maxPlayers - connectedPlayers.length} more` 
                     : connectedPlayers.some(p => !p.isReady && !p.isHost)
                       ? 'waiting for players to be ready'
                       : 'start game'}

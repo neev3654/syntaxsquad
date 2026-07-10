@@ -377,8 +377,8 @@ export default function setupSocketHandlers(io) {
         }
 
         const connectedPlayers = room.players.filter(p => p.isConnected);
-        if (connectedPlayers.length < 2) {
-          return callback?.({ success: false, error: 'At least 2 souls are needed...' });
+        if (connectedPlayers.length < room.maxPlayers) {
+          return callback?.({ success: false, error: `The mansion requires all ${room.maxPlayers} souls to begin...` });
         }
 
         // Ensure all non-host players are ready
