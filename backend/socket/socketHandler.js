@@ -227,25 +227,7 @@ export default function setupSocketHandlers(io) {
         console.error('[Socket] chat-message error:', error);
       }
     });
-    // ─── WEBRTC SIGNALING ───
-    socket.on('webrtc-signal', async (data) => {
-      try {
-        const { roomCode, targetPlayerId, signal, callerId } = data;
-        const room = await Room.findOne({ roomCode });
-        if (!room) return;
-        
-        const targetPlayer = room.players.find(p => p.playerId === targetPlayerId);
-        if (targetPlayer && targetPlayer.isConnected) {
-          // Forward the signal to the target player's socket
-          io.to(targetPlayer.socketId).emit('webrtc-signal', {
-            callerId,
-            signal
-          });
-        }
-      } catch (error) {
-        console.error('[Socket] webrtc-signal error:', error);
-      }
-    });
+
 
     // ─── TYPING ───
     socket.on('typing', (data) => {

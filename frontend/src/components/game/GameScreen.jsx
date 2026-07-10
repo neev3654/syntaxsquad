@@ -2,13 +2,14 @@ import React, { useState } from 'react';
 import { useGame } from '../../contexts/GameContext.jsx';
 import { useVoice } from '../../contexts/VoiceContext.jsx';
 import { motion, AnimatePresence } from 'framer-motion';
-import AudioRenderer from '../common/AudioRenderer.jsx';
-import { setMuted } from '../../audio/audioEngine.js';
+import { playClickSound, playHoverSound, setMuted } from '../../audio/audioEngine.js';
+import RoomExploration from './RoomExploration.jsx';
 
 export default function GameScreen() {
   const { state, actions } = useGame();
   const { isMuted, toggleMute, micError } = useVoice();
   const [activeTab, setActiveTab] = useState('role'); // role, location, suspects, timeline, clues
+  const [phase, setPhase] = useState('briefing'); // briefing | exploring
   const [musicMuted, setMusicMuted] = useState(false);
 
   const toggleMusic = () => {
@@ -34,6 +35,12 @@ export default function GameScreen() {
     );
   }
 
+  // ── Room Exploration Phase ──
+  if (phase === 'exploring') {
+    return <RoomExploration />;
+  }
+
+  // ── Briefing Phase ──
   const tabs = [
     { id: 'role', label: 'Your Role' },
     { id: 'location', label: 'The Location' },
@@ -46,23 +53,23 @@ export default function GameScreen() {
       key="game-screen"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="absolute inset-0 bg-black/90 z-50 font-mono text-gray-300 overflow-hidden flex flex-col"
+      className="absolute inset-0 bg-black/60 backdrop-blur-sm z-50 overflow-hidden flex flex-col"
     >
       {/* Header */}
-      <header className="p-6 border-b border-gray-800 flex justify-between items-center bg-black/50">
-        <div>
-          <h1 className="text-2xl md:text-3xl text-red-500/80 tracking-widest uppercase">
+      <header className="px-6 py-8 md:px-10 md:py-10 border-b border-[color:var(--color-blood-dark)] flex flex-col md:flex-row justify-between items-start md:items-center gap-8 bg-black/80">
+        <div className="flex-1 min-w-0 pr-4">
+          <h1 className="game-title text-3xl md:text-5xl tracking-widest break-words leading-tight">
             {mystery.victim.name} is dead.
           </h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="game-subtitle text-base md:text-xl mt-4 leading-loose break-words whitespace-pre-wrap text-[color:var(--color-bone)]">
             {mystery.victim.backstory}
           </p>
         </div>
-        <div className="flex items-center gap-6">
+        <div className="flex flex-wrap items-center gap-4 shrink-0">
           <button
             onClick={toggleMusic}
-            className={`text-xs px-3 py-1 border rounded transition-colors ${
-              musicMuted ? 'text-blue-400 border-blue-500/50 bg-blue-500/10' : 'text-red-400 border-red-500/50 bg-red-500/10'
+            className={`text-xs px-3 py-1 border rounded transition-colors font-[family-name:var(--font-family-heading)] tracking-widest ${
+              musicMuted ? 'text-[color:var(--color-moonlight)] border-[color:var(--color-moonlight)] bg-[color:var(--color-moonlight-dim)]' : 'text-[color:var(--color-blood-glow)] border-[color:var(--color-blood)] bg-[color:var(--color-crimson)]'
             }`}
             title="Toggle Background Music"
           >
@@ -70,19 +77,19 @@ export default function GameScreen() {
           </button>
           <button
             onClick={toggleMute}
-            className={`text-xs px-3 py-1 border rounded transition-colors ${
-              isMuted ? 'text-green-400 border-green-500/50 bg-green-500/10' : 'text-red-400 border-red-500/50 bg-red-500/10'
+            className={`text-xs px-3 py-1 border rounded transition-colors font-[family-name:var(--font-family-heading)] tracking-widest ${
+              !isMuted ? 'text-[color:var(--color-gold)] border-[color:var(--color-gold-dim)] bg-[color:var(--color-gold-dim)]' : 'text-[color:var(--color-blood-glow)] border-[color:var(--color-blood)] bg-[color:var(--color-crimson)]'
             }`}
             title={micError || 'Toggle Microphone'}
           >
-            {isMuted ? '[MIC ON]' : '[MIC OFF]'}
+            {!isMuted ? '[MIC ON]' : '[MIC OFF]'}
           </button>
           <button
             onClick={() => {
               actions.closeRoom();
               window.location.href = '/';
             }}
-            className="text-xs text-gray-600 hover:text-red-400 transition-colors"
+            className="text-xs text-[color:var(--color-bone-dark)] hover:text-[color:var(--color-blood-glow)] transition-colors font-[family-name:var(--font-family-heading)] tracking-widest"
           >
             [LEAVE GAME]
           </button>
@@ -90,15 +97,15 @@ export default function GameScreen() {
       </header>
 
       {/* Tabs */}
-      <div className="flex border-b border-gray-800 bg-black/30">
+      <div className="flex border-t border-b border-[color:var(--color-blood-dark)] bg-black/60 my-8 md:my-12 flex-shrink-0">
         {tabs.map(tab => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex-1 py-3 text-sm tracking-wider transition-colors ${
+            className={`flex-1 py-4 md:py-5 text-sm md:text-base tracking-widest uppercase font-[family-name:var(--font-family-heading)] transition-all ${
               activeTab === tab.id
-                ? 'text-red-400 border-b-2 border-red-500/50 bg-white/5'
-                : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'
+                ? 'text-[color:var(--color-blood-glow)] border-b-2 border-[color:var(--color-blood)] bg-[color:var(--color-crimson)] bg-opacity-20'
+                : 'text-[color:var(--color-bone-dark)] hover:text-[color:var(--color-bone)] hover:bg-white/5'
             }`}
           >
             [{tab.label}]
@@ -107,7 +114,7 @@ export default function GameScreen() {
       </div>
 
       {/* Content Area */}
-      <div className="flex-1 overflow-y-auto p-6 md:p-10">
+      <div className="flex-1 overflow-y-auto p-4 md:p-10 w-full relative">
         <AnimatePresence mode="wait">
           {activeTab === 'role' && (
             <motion.div
@@ -115,33 +122,33 @@ export default function GameScreen() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="max-w-3xl mx-auto space-y-8"
+              className="w-full space-y-8"
             >
-              <div className="text-center mb-10">
-                <h2 className="text-sm text-gray-500 tracking-widest uppercase mb-2">You are</h2>
-                <h1 className="text-4xl text-white tracking-widest">{myRole?.name}</h1>
-                <p className="text-gray-400 mt-2">{myRole?.age} yrs • {myRole?.occupation}</p>
+              <div className="text-center mb-14 mt-4">
+                <h2 className="font-[family-name:var(--font-family-heading)] text-[color:var(--color-gold-dim)] tracking-widest uppercase mb-4 text-base">You are</h2>
+                <h1 className="game-title text-4xl md:text-6xl break-words leading-tight">{myRole?.name}</h1>
+                <p className="game-subtitle text-xl md:text-2xl mt-4">{myRole?.age} yrs • {myRole?.occupation}</p>
               </div>
 
-              <div className="space-y-6">
-                <section className="bg-gray-900/50 p-6 border border-gray-800 rounded">
-                  <h3 className="text-red-400/80 mb-2 tracking-wider">Public Background</h3>
-                  <p className="leading-relaxed">{myRole?.publicBackground}</p>
+              <div className="space-y-10">
+                <section className="panel rounded overflow-hidden shadow-lg">
+                  <h3 className="panel-header text-lg">Public Background</h3>
+                  <p className="p-6 md:p-8 leading-loose break-words whitespace-pre-wrap text-[color:var(--color-bone)] text-xl">{myRole?.publicBackground}</p>
                 </section>
 
-                <section className="bg-red-950/20 p-6 border border-red-900/30 rounded">
-                  <h3 className="text-red-500 mb-2 tracking-wider">Private Objective</h3>
-                  <p className="leading-relaxed text-gray-300">{myRole?.privateObjective}</p>
+                <section className="panel rounded overflow-hidden shadow-lg border border-[color:var(--color-blood-dark)]">
+                  <h3 className="panel-header text-lg bg-[color:var(--color-crimson)] bg-opacity-20 border-b border-[color:var(--color-blood-dark)] text-[color:var(--color-blood-glow)]">Private Objective</h3>
+                  <p className="p-6 md:p-8 leading-loose text-gray-300 break-words whitespace-pre-wrap text-xl">{myRole?.privateObjective}</p>
                 </section>
 
-                <section className="bg-gray-900/50 p-6 border border-gray-800 rounded">
-                  <h3 className="text-purple-400/80 mb-2 tracking-wider">Hidden Information</h3>
-                  <p className="leading-relaxed">{myRole?.hiddenInformation}</p>
+                <section className="panel rounded overflow-hidden shadow-lg">
+                  <h3 className="panel-header text-lg text-[color:var(--color-moonlight)]">Hidden Information</h3>
+                  <p className="p-6 md:p-8 leading-loose break-words whitespace-pre-wrap text-[color:var(--color-bone)] text-xl">{myRole?.hiddenInformation}</p>
                 </section>
 
-                <section className="bg-gray-900/50 p-6 border border-gray-800 rounded">
-                  <h3 className="text-purple-400/80 mb-2 tracking-wider">Secret Relationship</h3>
-                  <p className="leading-relaxed">{myRole?.secretRelationship}</p>
+                <section className="panel rounded overflow-hidden shadow-lg">
+                  <h3 className="panel-header text-lg text-[color:var(--color-moonlight)]">Secret Relationship</h3>
+                  <p className="p-6 md:p-8 leading-loose break-words whitespace-pre-wrap text-[color:var(--color-bone)] text-xl">{myRole?.secretRelationship}</p>
                 </section>
               </div>
             </motion.div>
@@ -153,10 +160,10 @@ export default function GameScreen() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="max-w-3xl mx-auto"
+              className="w-full"
             >
-              <h2 className="text-3xl text-white tracking-widest mb-6">{mystery.location.name}</h2>
-              <p className="text-lg leading-relaxed text-gray-400 border-l-2 border-gray-700 pl-6 py-2">
+              <h2 className="game-title text-3xl md:text-5xl mb-10 break-words text-center mt-4">{mystery.location.name}</h2>
+              <p className="text-xl md:text-2xl leading-loose text-[color:var(--color-bone)] border-l-4 border-[color:var(--color-blood)] pl-6 md:pl-10 py-4 break-words whitespace-pre-wrap">
                 {mystery.location.description}
               </p>
             </motion.div>
@@ -168,21 +175,23 @@ export default function GameScreen() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6"
+              className="w-full flex flex-wrap justify-center gap-8"
             >
               {otherSuspects.map((suspect, idx) => (
-                <div key={idx} className="bg-gray-900/40 p-6 border border-gray-800 rounded">
-                  <h3 className="text-xl text-white mb-1">{suspect.name}</h3>
-                  <p className="text-xs text-gray-500 mb-4">{suspect.age} yrs • {suspect.occupation}</p>
-                  
-                  <div className="space-y-3 text-sm">
-                    <div>
-                      <span className="text-gray-500 block mb-1">Appearance</span>
-                      <p>{suspect.physicalDescription}</p>
-                    </div>
-                    <div>
-                      <span className="text-gray-500 block mb-1">Known Background</span>
-                      <p>{suspect.publicBackground}</p>
+                <div key={idx} className="panel rounded overflow-hidden shadow-lg flex-1 min-w-[320px] max-w-3xl">
+                  <div className="p-6 md:p-8">
+                    <h3 className="game-title text-2xl md:text-3xl mb-2 break-words">{suspect.name}</h3>
+                    <p className="game-subtitle text-base mb-8 text-[color:var(--color-bone-dark)]">{suspect.age} yrs • {suspect.occupation}</p>
+                    
+                    <div className="space-y-8 text-lg">
+                      <div>
+                        <span className="font-[family-name:var(--font-family-heading)] text-[color:var(--color-gold-dim)] uppercase tracking-wider text-sm block mb-2">Appearance</span>
+                        <p className="break-words whitespace-pre-wrap text-[color:var(--color-bone)] leading-relaxed">{suspect.physicalDescription}</p>
+                      </div>
+                      <div>
+                        <span className="font-[family-name:var(--font-family-heading)] text-[color:var(--color-gold-dim)] uppercase tracking-wider text-sm block mb-2">Known Background</span>
+                        <p className="break-words whitespace-pre-wrap text-[color:var(--color-bone)] leading-relaxed">{suspect.publicBackground}</p>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -196,17 +205,17 @@ export default function GameScreen() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-10"
+              className="w-full grid grid-cols-1 lg:grid-cols-2 gap-10"
             >
               {/* Timeline */}
               <div>
-                <h3 className="text-xl text-white tracking-widest mb-6 border-b border-gray-800 pb-2">Timeline</h3>
-                <div className="space-y-6">
+                <h3 className="game-title text-3xl mb-8 border-b border-[color:var(--color-blood-dark)] pb-4">Timeline</h3>
+                <div className="space-y-10 mt-6">
                   {mystery.timeline.map((event, idx) => (
-                    <div key={idx} className="relative pl-6 border-l border-gray-800">
-                      <div className="absolute w-2 h-2 bg-gray-600 rounded-full -left-[4.5px] top-1.5" />
-                      <span className="text-red-400/80 text-sm block mb-1">{event.time}</span>
-                      <p className="text-sm">{event.event}</p>
+                    <div key={idx} className="relative pl-10 border-l-2 border-[color:var(--color-blood-dark)] py-1">
+                      <div className="absolute w-4 h-4 bg-[color:var(--color-blood-glow)] rounded-full -left-[9px] top-2 shadow-[0_0_15px_var(--color-blood)]" />
+                      <span className="font-[family-name:var(--font-family-heading)] text-[color:var(--color-gold)] text-base tracking-widest block mb-3 break-words">{event.time}</span>
+                      <p className="text-xl text-[color:var(--color-bone)] break-words whitespace-pre-wrap leading-relaxed">{event.event}</p>
                     </div>
                   ))}
                 </div>
@@ -214,12 +223,12 @@ export default function GameScreen() {
 
               {/* Clues */}
               <div>
-                <h3 className="text-xl text-white tracking-widest mb-6 border-b border-gray-800 pb-2">Initial Clues</h3>
-                <div className="space-y-4">
+                <h3 className="game-title text-3xl mb-8 border-b border-[color:var(--color-blood-dark)] pb-4">Initial Clues</h3>
+                <div className="space-y-8 mt-6">
                   {mystery.initialClues.map((clue, idx) => (
-                    <div key={idx} className="bg-gray-900/30 p-4 border border-gray-800 rounded">
-                      <h4 className="text-white mb-1">{clue.name}</h4>
-                      <p className="text-sm text-gray-400">{clue.description}</p>
+                    <div key={idx} className="panel rounded overflow-hidden shadow-lg">
+                      <h4 className="panel-header text-lg">{clue.name}</h4>
+                      <p className="p-6 md:p-8 text-xl text-[color:var(--color-bone)] break-words whitespace-pre-wrap leading-relaxed">{clue.description}</p>
                     </div>
                   ))}
                 </div>
@@ -229,7 +238,32 @@ export default function GameScreen() {
         </AnimatePresence>
       </div>
 
-      <AudioRenderer />
+      {/* ── Enter the Mansion Button ── */}
+      <div
+        className="px-6 py-5 border-t flex items-center justify-center"
+        style={{ borderColor: 'rgba(139, 0, 0, 0.3)', background: 'rgba(5, 3, 2, 0.95)' }}
+      >
+        <button
+          onClick={() => { playClickSound(); setPhase('exploring'); }}
+          onMouseEnter={playHoverSound}
+          className="relative overflow-hidden group transition-all duration-500"
+          style={{
+            fontFamily: 'var(--font-family-heading), Cinzel, serif',
+            fontSize: '1.1rem',
+            letterSpacing: '0.2em',
+            textTransform: 'uppercase',
+            color: '#d4c5a9',
+            background: 'linear-gradient(180deg, rgba(30,20,15,0.9) 0%, rgba(15,10,8,0.95) 100%)',
+            border: '1px solid rgba(139, 0, 0, 0.5)',
+            padding: '1rem 3rem',
+            cursor: 'pointer',
+            textShadow: '0 0 15px rgba(139, 0, 0, 0.6)',
+            boxShadow: '0 0 25px rgba(139, 0, 0, 0.2), inset 0 0 15px rgba(139, 0, 0, 0.05)',
+          }}
+        >
+          ⚰️ Enter the Mansion
+        </button>
+      </div>
     </motion.div>
   );
 }
