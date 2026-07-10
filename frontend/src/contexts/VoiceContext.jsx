@@ -1,325 +1,123 @@
-import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
-import socket from '../socket/socket.js';
+import React, { createContext, useContext, useEffect, useState, useMemo } from 'react';
+import { LiveKitRoom, RoomAudioRenderer } from '@livekit/components-react';
 import { useGame } from './GameContext.jsx';
+import { fetchVoiceToken } from '../services/voiceApi.js';
+import { useVoiceControls } from '../hooks/useVoice.js';
 
+// Outer context to expose token/connection status if needed
 const VoiceContext = createContext(null);
 
-// STUN + free TURN servers for production NAT traversal
-const ICE_SERVERS = {
-  iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' },
-    {
-      urls: 'turn:openrelay.metered.ca:80',
-      username: 'openrelayproject',
-      credential: 'openrelayproject'
-    },
-    {
-      urls: 'turn:openrelay.metered.ca:443',
-      username: 'openrelayproject',
-      credential: 'openrelayproject'
-    },
-    {
-      urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-      username: 'openrelayproject',
-      credential: 'openrelayproject'
-    }
-  ]
-};
+// Inner wrapper that has access to LiveKit hooks
+function VoiceController({ children }) {
+  const { isMuted, toggleMute, micError, setIsMuted } = useVoiceControls();
 
-export function VoiceProvider({ children }) {
-  const { state: gameState } = useGame();
-  const { room, playerId: myPlayerId, roomCode } = gameState;
-
-  const [isMuted, setIsMuted] = useState(true);
-  const [localStream, setLocalStream] = useState(null);
-  const [remoteStreams, setRemoteStreams] = useState({});
-  const [micError, setMicError] = useState(null);
-
-  const peersRef = useRef({});
-  const localStreamRef = useRef(null);
-  const micAttemptedRef = useRef(false);
-  const pendingSignalsRef = useRef([]);
-  const initiatorMapRef = useRef({}); // track who is initiator for renegotiation
-
-  // ─── Initialize Microphone ───
-  const initMicrophone = useCallback(async () => {
-    if (localStreamRef.current || micAttemptedRef.current) return null;
-    micAttemptedRef.current = true;
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-      // Always start muted
-      stream.getAudioTracks().forEach(track => {
-        track.enabled = false;
-      });
-      localStreamRef.current = stream;
-      setLocalStream(stream);
-      setMicError(null);
-      console.log('[Voice] Microphone initialized');
-      return stream;
-    } catch (err) {
-      console.error('[Voice] Microphone error:', err);
-      setMicError('Microphone access denied or unavailable.');
-      return null;
-    }
-  }, []); // no deps — never recreated
-
-  // ─── Toggle Mute ───
-  const toggleMute = useCallback(() => {
-    setIsMuted(prev => {
-      const newMuted = !prev;
-      if (localStreamRef.current) {
-        localStreamRef.current.getAudioTracks().forEach(track => {
-          track.enabled = !newMuted;
-        });
-      }
-      console.log('[Voice] Mic', newMuted ? 'muted' : 'unmuted');
-      return newMuted;
-    });
-  }, []);
-
-  // ─── Process a single WebRTC signal ───
-  const processSignal = useCallback(async (data) => {
-    const { callerId, signal } = data;
-    console.log(`[Voice] Signal: ${signal.type} from ${callerId}`);
-
-    let pc = peersRef.current[callerId];
-
-    if (!pc && signal.type === 'offer') {
-      // We are receiving an offer — we are NOT the initiator
-      pc = createPeer(callerId, false);
-    }
-
-    if (!pc) {
-      console.warn('[Voice] No peer for signal, dropping');
-      return;
-    }
-
-    try {
-      if (signal.type === 'offer') {
-        await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        socket.emit('webrtc-signal', {
-          roomCode,
-          targetPlayerId: callerId,
-          callerId: myPlayerId,
-          signal: { type: 'answer', sdp: pc.localDescription }
-        });
-        console.log('[Voice] Sent answer to', callerId);
-      } else if (signal.type === 'answer') {
-        await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
-        console.log('[Voice] Got answer from', callerId);
-      } else if (signal.type === 'candidate') {
-        if (pc.remoteDescription) {
-          await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
-        }
-      }
-    } catch (err) {
-      console.error('[Voice] Signal processing error:', err);
-    }
-  }, [myPlayerId, roomCode]);
-
-  // ─── Create a single peer connection ───
-  const createPeer = useCallback((targetPlayerId, isInitiator) => {
-    if (peersRef.current[targetPlayerId]) return peersRef.current[targetPlayerId];
-
-    console.log(`[Voice] Creating peer → ${targetPlayerId} (initiator: ${isInitiator})`);
-    const pc = new RTCPeerConnection(ICE_SERVERS);
-    peersRef.current[targetPlayerId] = pc;
-    initiatorMapRef.current[targetPlayerId] = isInitiator;
-
-    // Add local audio tracks if mic is ready
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach(track => {
-        pc.addTrack(track, localStreamRef.current);
-      });
-      console.log('[Voice] Added local tracks');
-    }
-
-    // Receive remote audio
-    pc.ontrack = (event) => {
-      console.log(`[Voice] Got remote track from ${targetPlayerId}`);
-      setRemoteStreams(prev => ({
-        ...prev,
-        [targetPlayerId]: event.streams[0]
-      }));
-    };
-
-    // Send ICE candidates
-    pc.onicecandidate = (event) => {
-      if (event.candidate) {
-        socket.emit('webrtc-signal', {
-          roomCode,
-          targetPlayerId,
-          callerId: myPlayerId,
-          signal: { type: 'candidate', candidate: event.candidate }
-        });
-      }
-    };
-
-    pc.oniceconnectionstatechange = () => {
-      console.log(`[Voice] ICE ${targetPlayerId}: ${pc.iceConnectionState}`);
-    };
-
-    pc.onconnectionstatechange = () => {
-      console.log(`[Voice] Conn ${targetPlayerId}: ${pc.connectionState}`);
-      if (['disconnected', 'failed', 'closed'].includes(pc.connectionState)) {
-        setRemoteStreams(prev => {
-          const next = { ...prev };
-          delete next[targetPlayerId];
-          return next;
-        });
-        delete peersRef.current[targetPlayerId];
-        delete initiatorMapRef.current[targetPlayerId];
-      }
-    };
-
-    // If we are the initiator, create and send the offer
-    if (isInitiator) {
-      pc.createOffer()
-        .then(offer => pc.setLocalDescription(offer))
-        .then(() => {
-          socket.emit('webrtc-signal', {
-            roomCode,
-            targetPlayerId,
-            callerId: myPlayerId,
-            signal: { type: 'offer', sdp: pc.localDescription }
-          });
-          console.log('[Voice] Sent offer to', targetPlayerId);
-        })
-        .catch(err => console.error('[Voice] Offer error:', err));
-    }
-
-    return pc;
-  }, [myPlayerId, roomCode]);
-
-  // ─── Socket listener for WebRTC signals ───
-  useEffect(() => {
-    const handleSignal = (data) => {
-      // If mic isn't ready yet, queue the signal
-      if (!localStreamRef.current) {
-        console.log('[Voice] Mic not ready, queuing signal');
-        pendingSignalsRef.current.push(data);
-        return;
-      }
-      processSignal(data);
-    };
-
-    socket.on('webrtc-signal', handleSignal);
-    return () => {
-      socket.off('webrtc-signal', handleSignal);
-    };
-  }, [processSignal]);
-
-  // ─── When mic becomes ready: add tracks to existing peers + process queued signals ───
-  useEffect(() => {
-    if (!localStream || !localStreamRef.current) return;
-
-    console.log('[Voice] Mic ready — adding tracks to existing peers & processing queue');
-
-    // Add tracks to any peer connections that were created before mic was ready
-    Object.entries(peersRef.current).forEach(([peerId, pc]) => {
-      const senders = pc.getSenders();
-      const hasAudio = senders.some(s => s.track && s.track.kind === 'audio');
-      if (!hasAudio && localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach(track => {
-          pc.addTrack(track, localStreamRef.current);
-        });
-        console.log(`[Voice] Late-added tracks to peer ${peerId}`);
-
-        // Renegotiate if we are the initiator
-        if (initiatorMapRef.current[peerId]) {
-          pc.createOffer()
-            .then(offer => pc.setLocalDescription(offer))
-            .then(() => {
-              socket.emit('webrtc-signal', {
-                roomCode,
-                targetPlayerId: peerId,
-                callerId: myPlayerId,
-                signal: { type: 'offer', sdp: pc.localDescription }
-              });
-              console.log('[Voice] Renegotiation offer to', peerId);
-            })
-            .catch(err => console.error('[Voice] Renegotiation error:', err));
-        }
-      }
-    });
-
-    // Process any queued signals
-    if (pendingSignalsRef.current.length > 0) {
-      console.log(`[Voice] Processing ${pendingSignalsRef.current.length} queued signals`);
-      const queued = [...pendingSignalsRef.current];
-      pendingSignalsRef.current = [];
-      queued.forEach(data => processSignal(data));
-    }
-  }, [localStream, myPlayerId, roomCode, processSignal]);
-
-  // ─── Connect to peers when room updates (only after mic is ready) ───
-  useEffect(() => {
-    if (!room || !myPlayerId || !localStreamRef.current) return;
-
-    room.players.forEach(p => {
-      if (p.playerId === myPlayerId || !p.isConnected) return;
-
-      // Tie-breaker: higher ID initiates
-      if (!peersRef.current[p.playerId] && myPlayerId > p.playerId) {
-        createPeer(p.playerId, true);
-      }
-    });
-
-    // Clean up peers for disconnected players
-    const activeIds = room.players.filter(p => p.isConnected).map(p => p.playerId);
-    Object.keys(peersRef.current).forEach(id => {
-      if (!activeIds.includes(id)) {
-        peersRef.current[id].close();
-        delete peersRef.current[id];
-        delete initiatorMapRef.current[id];
-        setRemoteStreams(prev => {
-          const next = { ...prev };
-          delete next[id];
-          return next;
-        });
-      }
-    });
-  }, [room, myPlayerId, localStream, createPeer]);
-
-  // ─── Init mic when entering a room ───
-  useEffect(() => {
-    if (roomCode && !localStreamRef.current) {
-      initMicrophone();
-    }
-  }, [roomCode, initMicrophone]);
-
-  // ─── Full cleanup when leaving room ───
-  useEffect(() => {
-    if (!roomCode) {
-      Object.values(peersRef.current).forEach(pc => pc.close());
-      peersRef.current = {};
-      initiatorMapRef.current = {};
-      pendingSignalsRef.current = [];
-      setRemoteStreams({});
-
-      if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach(track => track.stop());
-        localStreamRef.current = null;
-        setLocalStream(null);
-      }
-      micAttemptedRef.current = false;
-    }
-  }, [roomCode]);
-
-  const value = {
+  const value = useMemo(() => ({
     isMuted,
     toggleMute,
-    remoteStreams,
     micError,
-    initMicrophone
-  };
+    // Provide a no-op initMicrophone since LiveKit handles permissions on un-mute
+    initMicrophone: () => Promise.resolve(null),
+    // Dummy remoteStreams for legacy compatibility with UI (they are now handled by RoomAudioRenderer)
+    remoteStreams: {}
+  }), [isMuted, toggleMute, micError]);
 
   return (
     <VoiceContext.Provider value={value}>
+      {children}
+    </VoiceContext.Provider>
+  );
+}
+
+export function VoiceProvider({ children }) {
+  const { state } = useGame();
+  const { roomCode, playerId, playerName, room } = state;
+  const [token, setToken] = useState('');
+  const [serverUrl, setServerUrl] = useState('');
+  const [error, setError] = useState(null);
+
+  // Automatically fetch token when joining a room
+  useEffect(() => {
+    // Only connect if we are genuinely in a room with valid state
+    if (roomCode && playerId && playerName && room) {
+      let active = true;
+
+      const connectVoice = async () => {
+        try {
+          console.log('[Voice] Requesting token for room:', roomCode);
+          const data = await fetchVoiceToken(roomCode, playerId, playerName);
+          
+          if (active) {
+            setToken(data.token);
+            setServerUrl(data.url);
+            setError(null);
+            console.log('[Voice] Token acquired, joining LiveKit room...');
+          }
+        } catch (err) {
+          if (active) {
+            console.error('[Voice] Failed to initialize voice connection:', err);
+            setError(err.message);
+          }
+        }
+      };
+
+      connectVoice();
+
+      // Cleanup when leaving room
+      return () => {
+        active = false;
+        console.log('[Voice] Leaving room, clearing tokens...');
+        setToken('');
+        setServerUrl('');
+      };
+    }
+  }, [roomCode, playerId, playerName, room]); // Re-run if these core identifiers change
+
+  // If we have a token, render the LiveKit environment
+  if (token && serverUrl) {
+    return (
+      <LiveKitRoom
+        token={token}
+        serverUrl={serverUrl}
+        connect={true}
+        // Enable audio automatically upon joining
+        audio={true}
+        video={false}
+        options={{
+          adaptiveStream: true,
+          dynacast: true,
+          publishDefaults: {
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+            }
+          }
+        }}
+        onDisconnected={() => {
+          console.log('[Voice] Disconnected from LiveKit edge.');
+          setToken(''); // Reset to prevent phantom connections
+        }}
+      >
+        <VoiceController>
+          {children}
+        </VoiceController>
+        {/* Invisible component that plays all remote audio tracks automatically */}
+        <RoomAudioRenderer />
+      </LiveKitRoom>
+    );
+  }
+
+  // Fallback context provider when not in a room, or waiting for token
+  const fallbackValue = {
+    isMuted: false,
+    toggleMute: () => console.log('[Voice] Cannot unmute outside a room'),
+    micError: error,
+    initMicrophone: () => Promise.resolve(null),
+    remoteStreams: {}
+  };
+
+  return (
+    <VoiceContext.Provider value={fallbackValue}>
       {children}
     </VoiceContext.Provider>
   );
@@ -332,5 +130,3 @@ export function useVoice() {
   }
   return context;
 }
-
-export default VoiceContext;

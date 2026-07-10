@@ -4,7 +4,6 @@ import { useVoice } from '../../contexts/VoiceContext.jsx';
 import { motion, AnimatePresence } from 'framer-motion';
 import { playClickSound, playHoverSound, setMuted } from '../../audio/audioEngine.js';
 import RoomExploration from './RoomExploration.jsx';
-import AudioRenderer from '../common/AudioRenderer.jsx';
 
 export default function GameScreen() {
   const { state, actions } = useGame();
@@ -79,11 +78,11 @@ export default function GameScreen() {
           <button
             onClick={toggleMute}
             className={`text-xs px-3 py-1 border rounded transition-colors font-[family-name:var(--font-family-heading)] tracking-widest ${
-              isMuted ? 'text-[color:var(--color-gold)] border-[color:var(--color-gold-dim)] bg-[color:var(--color-gold-dim)]' : 'text-[color:var(--color-blood-glow)] border-[color:var(--color-blood)] bg-[color:var(--color-crimson)]'
+              !isMuted ? 'text-[color:var(--color-gold)] border-[color:var(--color-gold-dim)] bg-[color:var(--color-gold-dim)]' : 'text-[color:var(--color-blood-glow)] border-[color:var(--color-blood)] bg-[color:var(--color-crimson)]'
             }`}
             title={micError || 'Toggle Microphone'}
           >
-            {isMuted ? '[MIC ON]' : '[MIC OFF]'}
+            {!isMuted ? '[MIC ON]' : '[MIC OFF]'}
           </button>
           <button
             onClick={() => {
@@ -265,8 +264,6 @@ export default function GameScreen() {
           ⚰️ Enter the Mansion
         </button>
       </div>
-
-      <AudioRenderer />
     </motion.div>
   );
 }

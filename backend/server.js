@@ -4,7 +4,9 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import connectDB from './config/db.js';
+import { validateLiveKitConfig } from './config/livekit.js';
 import setupSocketHandlers from './socket/socketHandler.js';
+import voiceRoutes from './routes/voice.routes.js';
 import Room from './models/Room.js';
 
 const app = express();
@@ -66,6 +68,9 @@ app.get('/api/rooms/:code', async (req, res) => {
   }
 });
 
+// Voice chat routes
+app.use('/api/voice', voiceRoutes);
+
 // Setup socket handlers
 setupSocketHandlers(io);
 
@@ -74,6 +79,7 @@ const PORT = process.env.PORT || 3001;
 
 async function startServer() {
   await connectDB();
+  validateLiveKitConfig();
   httpServer.listen(PORT, () => {
     console.log(`\n⚰️  TALES BEYOND THE TOMB`);
     console.log(`🕯️  Server risen on port ${PORT}`);
