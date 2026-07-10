@@ -12,7 +12,11 @@ const httpServer = createServer(app);
 
 const io = new Server(httpServer, {
   cors: {
-    origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+    origin: [
+      'http://localhost:5173',
+      'https://tales-beyond-the-tomb-syntax-squad.vercel.app',
+      process.env.CORS_ORIGIN
+    ].filter(Boolean),
     methods: ['GET', 'POST'],
     credentials: true
   },
@@ -22,7 +26,11 @@ const io = new Server(httpServer, {
 
 // Middleware
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  origin: [
+    'http://localhost:5173',
+    'https://tales-beyond-the-tomb-syntax-squad.vercel.app',
+    process.env.CORS_ORIGIN
+  ].filter(Boolean),
   credentials: true
 }));
 app.use(express.json());
