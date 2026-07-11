@@ -4,7 +4,7 @@ import socket from '../socket/socket.js';
 const GameContext = createContext(null);
 
 const initialState = {
-  screen: 'intro', // intro | menu | host | join | lobby | countdown | game
+  screen: 'intro', // intro | menu | lobby | countdown | game | reveal
   playerId: null,
   playerName: '',
   room: null,
@@ -13,7 +13,14 @@ const initialState = {
   isConnected: false,
   ping: 0,
   countdown: null,
-  kicked: false
+  kicked: false,
+  // ── Phase 6/7 state ──
+  accusation: null,       // { accuserId, accusedId, accuserName, accusedName, defense }
+  votingPhase: null,      // { isActive, timeLimit, votesCast, suspects }
+  votingResults: null,    // { voteCounts, winner, isTie }
+  revealData: null,       // { narrative, statistics }
+  gameState: 'investigation', // investigation | accusation | voting | reveal
+  discoveredClueIds: []
 };
 
 function gameReducer(state, action) {
@@ -23,7 +30,16 @@ function gameReducer(state, action) {
     case 'SET_PLAYER':
       return { ...state, playerId: action.payload.playerId, playerName: action.payload.playerName };
     case 'SET_ROOM':
-      return { ...state, room: action.payload, roomCode: action.payload?.roomCode };
+      return {
+        ...state,
+        room: action.payload,
+        roomCode: action.payload?.roomCode,
+        // Sync game state from room if present
+        gameState: action.payload?.gameState || state.gameState,
+        accusation: action.payload?.accusation || state.accusation,
+        votingPhase: action.payload?.votingPhase || state.votingPhase,
+        discoveredClueIds: action.payload?.discoveredClueIds || state.discoveredClueIds
+      };
     case 'SET_ROOM_CODE':
       return { ...state, roomCode: action.payload };
     case 'SET_ERROR':
@@ -42,22 +58,43 @@ function gameReducer(state, action) {
       return { ...initialState, isConnected: state.isConnected, screen: 'menu' };
     case 'ADD_CHAT_MESSAGE':
       if (!state.room) return state;
-      // Only update the messages array inside room, keeping everything else by reference
       const existingMsgs = state.room.messages || [];
-      // Deduplicate: skip if last message has same content + playerId + close timestamp
       const last = existingMsgs[existingMsgs.length - 1];
       if (last && last.content === action.payload.content && last.playerId === action.payload.playerId) {
-        // Already present (from room-update), skip duplicate
         return state;
       }
-      const newMessages = [...existingMsgs, action.payload];
       return {
         ...state,
-        room: {
-          ...state.room,
-          messages: newMessages
-        }
+        room: { ...state.room, messages: [...existingMsgs, action.payload] }
       };
+    // ── Phase 6/7 actions ──
+    case 'SET_ACCUSATION':
+      return { ...state, accusation: action.payload, gameState: 'accusation' };
+    case 'SET_DEFENSE':
+      return {
+        ...state,
+        accusation: state.accusation
+          ? { ...state.accusation, defense: action.payload.defenseText, isResolved: true }
+          : state.accusation
+      };
+    case 'SET_VOTING_PHASE':
+      return { ...state, votingPhase: action.payload, gameState: 'voting' };
+    case 'UPDATE_VOTE_COUNT':
+      return {
+        ...state,
+        votingPhase: state.votingPhase
+          ? { ...state.votingPhase, votesCast: action.payload.votesCast, totalPlayers: action.payload.totalPlayers }
+          : state.votingPhase
+      };
+    case 'SET_VOTING_RESULTS':
+      return { ...state, votingResults: action.payload };
+    case 'SET_GAME_STATE':
+      return { ...state, gameState: action.payload };
+    case 'SET_REVEAL_DATA':
+      return { ...state, revealData: action.payload };
+    case 'ADD_DISCOVERED_CLUE':
+      if (state.discoveredClueIds.includes(action.payload)) return state;
+      return { ...state, discoveredClueIds: [...state.discoveredClueIds, action.payload] };
     default:
       return state;
   }
@@ -112,6 +149,63 @@ export function GameProvider({ children }) {
       dispatch({ type: 'ADD_CHAT_MESSAGE', payload: message });
     });
 
+    // ── Phase 6: Accusation & Voting ──
+    socket.on('player:accused', (data) => {
+      dispatch({ type: 'SET_ACCUSATION', payload: data });
+      // Also push to chat
+      dispatch({
+        type: 'ADD_CHAT_MESSAGE',
+        payload: {
+          playerId: 'system',
+          playerName: 'System',
+          content: `⚖️ ${data.accuserName} has accused ${data.accusedName}!`,
+          type: 'accusation',
+          timestamp: new Date()
+        }
+      });
+    });
+
+    socket.on('player:defended', (data) => {
+      dispatch({ type: 'SET_DEFENSE', payload: data });
+    });
+
+    socket.on('voting:started', (data) => {
+      dispatch({ type: 'SET_VOTING_PHASE', payload: data });
+    });
+
+    socket.on('player:voted', (data) => {
+      dispatch({
+        type: 'UPDATE_VOTE_COUNT',
+        payload: { votesCast: data.votesCast, totalPlayers: data.totalPlayers }
+      });
+    });
+
+    socket.on('voting:results', (data) => {
+      dispatch({ type: 'SET_VOTING_RESULTS', payload: data });
+    });
+
+    socket.on('game:stateChanged', (data) => {
+      dispatch({ type: 'SET_GAME_STATE', payload: data.state });
+      if (data.state === 'reveal') {
+        dispatch({ type: 'SET_SCREEN', payload: 'reveal' });
+      }
+    });
+
+    socket.on('game:revealData', (data) => {
+      dispatch({ type: 'SET_REVEAL_DATA', payload: data });
+    });
+
+    socket.on('clue:discovered', (data) => {
+      dispatch({ type: 'ADD_DISCOVERED_CLUE', payload: data.clueId });
+    });
+
+    socket.on('game:playAgain', (data) => {
+      // Reset to lobby/game state
+      dispatch({ type: 'SET_ROOM', payload: data.room });
+      dispatch({ type: 'SET_GAME_STATE', payload: 'investigation' });
+      dispatch({ type: 'SET_SCREEN', payload: 'lobby' });
+    });
+
     return () => {
       socket.off('connect');
       socket.off('disconnect');
@@ -122,6 +216,15 @@ export function GameProvider({ children }) {
       socket.off('kicked');
       socket.off('room-closed');
       socket.off('chat-message');
+      socket.off('player:accused');
+      socket.off('player:defended');
+      socket.off('voting:started');
+      socket.off('player:voted');
+      socket.off('voting:results');
+      socket.off('game:stateChanged');
+      socket.off('game:revealData');
+      socket.off('clue:discovered');
+      socket.off('game:playAgain');
     };
   }, []);
 
@@ -252,6 +355,78 @@ export function GameProvider({ children }) {
     dispatch({ type: 'RESET' });
   }, [state.roomCode, state.playerId]);
 
+  // ── Phase 6 actions ──
+  const accusePlayer = useCallback((accusedPlayerId) => {
+    return new Promise((resolve) => {
+      socket.emit('player:accuse', {
+        roomCode: state.roomCode,
+        playerId: state.playerId,
+        accusedPlayerId
+      }, (response) => {
+        if (!response?.success) {
+          dispatch({ type: 'SET_ERROR', payload: response?.error || 'Accusation failed' });
+        }
+        resolve(response);
+      });
+    });
+  }, [state.roomCode, state.playerId]);
+
+  const submitDefense = useCallback((defenseText) => {
+    return new Promise((resolve) => {
+      socket.emit('player:defend', {
+        roomCode: state.roomCode,
+        playerId: state.playerId,
+        defenseText
+      }, (response) => {
+        resolve(response);
+      });
+    });
+  }, [state.roomCode, state.playerId]);
+
+  const startVoting = useCallback(() => {
+    return new Promise((resolve) => {
+      socket.emit('player:startVoting', {
+        roomCode: state.roomCode,
+        playerId: state.playerId
+      }, (response) => {
+        resolve(response);
+      });
+    });
+  }, [state.roomCode, state.playerId]);
+
+  const castVote = useCallback((suspectId) => {
+    return new Promise((resolve) => {
+      socket.emit('player:castVote', {
+        roomCode: state.roomCode,
+        playerId: state.playerId,
+        suspectId
+      }, (response) => {
+        resolve(response);
+      });
+    });
+  }, [state.roomCode, state.playerId]);
+
+  const requestReveal = useCallback(() => {
+    socket.emit('game:requestReveal', { roomCode: state.roomCode }, () => {});
+  }, [state.roomCode]);
+
+  const playAgain = useCallback(() => {
+    socket.emit('game:playAgain', {
+      roomCode: state.roomCode,
+      playerId: state.playerId
+    }, () => {});
+  }, [state.roomCode, state.playerId]);
+
+  const discoverClue = useCallback((clueId) => {
+    if (!clueId || state.discoveredClueIds.includes(clueId)) return;
+    dispatch({ type: 'ADD_DISCOVERED_CLUE', payload: clueId });
+    socket.emit('clue:discovered', {
+      roomCode: state.roomCode,
+      playerId: state.playerId,
+      clueId
+    });
+  }, [state.roomCode, state.playerId, state.discoveredClueIds]);
+
   const value = {
     state,
     dispatch,
@@ -267,7 +442,15 @@ export function GameProvider({ children }) {
       lockRoom,
       changeSettings,
       startGame,
-      closeRoom
+      closeRoom,
+      // Phase 6/7
+      accusePlayer,
+      submitDefense,
+      startVoting,
+      castVote,
+      requestReveal,
+      playAgain,
+      discoverClue
     }
   };
 

@@ -10,6 +10,33 @@ class Room {
     this.status = this.status || 'waiting';
     this.createdAt = this.createdAt || new Date();
     this.updatedAt = this.updatedAt || new Date();
+    this.gameStartedAt = this.gameStartedAt || null;
+
+    // ── Phase 6: Accusation & Voting ──
+    this.accusation = this.accusation || {
+      accuserId: null,
+      accusedId: null,
+      defense: null,
+      timestamp: null,
+      isResolved: false
+    };
+
+    this.votes = this.votes || {};
+
+    this.votingPhase = this.votingPhase || {
+      isActive: false,
+      startTime: null,
+      timeLimit: 120, // seconds
+      votesCast: []
+    };
+
+    // ── Phase 6/7: Game lifecycle ──
+    this.gameState = this.gameState || 'investigation'; // investigation | accusation | voting | reveal
+    this.gameOver = this.gameOver || false;
+    this.revealData = this.revealData || null;
+
+    // Server-side clue tracking (for reveal analysis)
+    this.discoveredClueIds = this.discoveredClueIds || [];
   }
 
   async save() {

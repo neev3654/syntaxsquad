@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useGame } from '../../contexts/GameContext.jsx';
 import { playClickSound, playHoverSound } from '../../audio/audioEngine.js';
@@ -14,8 +14,50 @@ export default function RoomExploration() {
   const [discoveredClues, setDiscoveredClues] = useState([]);
   const [showMap, setShowMap] = useState(false);
 
+  // Accusation UI state
+  const [showAccuseModal, setShowAccuseModal] = useState(false);
+  const [defenseText, setDefenseText] = useState('');
+  const [defenseSubmitted, setDefenseSubmitted] = useState(false);
+  const [defenseTimer, setDefenseTimer] = useState(60);
+  const [accusationBannerVisible, setAccusationBannerVisible] = useState(false);
+
   const currentRoom = rooms.find(r => r.id === currentRoomId) || rooms[0];
   const connectedRooms = currentRoom?.connections?.map(id => rooms.find(r => r.id === id)).filter(Boolean) || [];
+
+  const myPlayerId = state.playerId;
+  const accusation = state.accusation;
+  const isAccused = accusation?.accusedId === myPlayerId;
+  const isHost = state.room?.hostId === myPlayerId;
+  const gameState = state.gameState;
+
+  // Other players I can accuse
+  const otherPlayers = (state.room?.players || []).filter(
+    p => p.playerId !== myPlayerId && p.isConnected
+  );
+
+  // Show accusation banner when a new accusation arrives
+  useEffect(() => {
+    if (accusation && accusation.accuserId && gameState === 'accusation') {
+      setAccusationBannerVisible(true);
+      setDefenseSubmitted(false);
+    }
+  }, [accusation?.accuserId, accusation?.accusedId, gameState]);
+
+  // Defense countdown timer
+  useEffect(() => {
+    if (gameState !== 'accusation' || !accusation?.accuserId) return;
+    setDefenseTimer(60);
+    const interval = setInterval(() => {
+      setDefenseTimer(prev => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [accusation?.accuserId, gameState]);
 
   const handleMoveToRoom = (roomId) => {
     playClickSound();
@@ -23,12 +65,33 @@ export default function RoomExploration() {
     setInspectedClue(null);
   };
 
-  const handleInspectClue = (clue) => {
+  const handleInspectClue = (clue, roomId, clueIdx) => {
     playClickSound();
     setInspectedClue(clue);
     if (!discoveredClues.find(c => c.name === clue.name)) {
       setDiscoveredClues(prev => [...prev, clue]);
+      // Sync with server
+      const clueId = `${roomId}_${clueIdx}`;
+      actions.discoverClue(clueId);
     }
+  };
+
+  const handleAccuse = async (targetPlayerId) => {
+    playClickSound();
+    setShowAccuseModal(false);
+    await actions.accusePlayer(targetPlayerId);
+  };
+
+  const handleSubmitDefense = async () => {
+    if (!defenseText.trim()) return;
+    playClickSound();
+    await actions.submitDefense(defenseText.trim());
+    setDefenseSubmitted(true);
+  };
+
+  const handleStartVoting = () => {
+    playClickSound();
+    actions.startVoting();
   };
 
   if (!currentRoom) {
@@ -46,6 +109,277 @@ export default function RoomExploration() {
       className="absolute inset-0 bg-black z-50 flex flex-col overflow-hidden"
       style={{ fontFamily: 'var(--font-family-body), Cormorant Garamond, serif' }}
     >
+      {/* ── ACCUSATION BANNER ── */}
+      <AnimatePresence>
+        {accusationBannerVisible && accusation?.accuserId && (
+          <motion.div
+            initial={{ y: -80, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -80, opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+            className="absolute top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-4"
+            style={{
+              background: 'linear-gradient(135deg, rgba(139,0,0,0.95), rgba(80,0,0,0.98))',
+              borderBottom: '2px solid rgba(200,0,0,0.6)',
+              boxShadow: '0 4px 30px rgba(139,0,0,0.5)'
+            }}
+          >
+            <div className="flex items-center gap-4">
+              <span className="text-2xl">⚖️</span>
+              <div>
+                <p
+                  className="text-lg font-bold tracking-wider"
+                  style={{ fontFamily: 'var(--font-family-heading), Cinzel, serif', color: '#fff' }}
+                >
+                  {accusation.accuserName} has accused {accusation.accusedName}!
+                </p>
+                <p className="text-sm" style={{ color: 'rgba(255,200,200,0.8)' }}>
+                  {gameState === 'accusation' && !accusation.isResolved
+                    ? `Defense window: ${defenseTimer}s remaining`
+                    : accusation.defense
+                    ? 'Defense submitted — voting begins soon'
+                    : 'Awaiting response...'}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setAccusationBannerVisible(false)}
+              className="text-xs opacity-50 hover:opacity-100 transition-opacity"
+              style={{ color: 'rgba(255,200,200,0.8)', background: 'none', border: 'none', cursor: 'pointer' }}
+            >
+              ✕
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── DEFENSE PANEL (shown to accused player) ── */}
+      <AnimatePresence>
+        {isAccused && gameState === 'accusation' && !defenseSubmitted && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="absolute inset-0 z-[60] flex items-center justify-center"
+            style={{ background: 'rgba(0,0,0,0.88)', backdropFilter: 'blur(6px)' }}
+          >
+            <motion.div
+              initial={{ y: 40 }}
+              animate={{ y: 0 }}
+              className="w-full max-w-xl mx-4 p-8 rounded-lg"
+              style={{
+                background: 'linear-gradient(160deg, rgba(20,10,10,0.98), rgba(40,10,10,0.98))',
+                border: '1px solid rgba(139,0,0,0.6)',
+                boxShadow: '0 0 60px rgba(139,0,0,0.3)'
+              }}
+            >
+              <div className="text-center mb-6">
+                <span className="text-4xl">🛡️</span>
+                <h2
+                  className="text-2xl mt-3 tracking-widest"
+                  style={{ fontFamily: 'var(--font-family-heading), Cinzel, serif', color: '#d4c5a9' }}
+                >
+                  You Have Been Accused
+                </h2>
+                <p className="text-sm mt-2" style={{ color: 'rgba(200,160,120,0.6)' }}>
+                  <span style={{ color: 'rgba(255,100,100,0.9)', fontWeight: 'bold' }}>
+                    {accusation?.accuserName}
+                  </span>{' '}
+                  accuses you of murder. Submit your defense before time runs out.
+                </p>
+                <div className="mt-3 text-sm font-mono" style={{ color: defenseTimer < 15 ? 'rgba(255,80,80,0.9)' : 'rgba(200,160,120,0.6)' }}>
+                  ⏱ {defenseTimer}s remaining
+                </div>
+              </div>
+
+              <textarea
+                value={defenseText}
+                onChange={e => setDefenseText(e.target.value)}
+                maxLength={500}
+                rows={5}
+                placeholder="State your defense... where were you? what do you know?"
+                className="w-full resize-none rounded p-4 text-sm leading-relaxed mb-4 focus:outline-none"
+                style={{
+                  background: 'rgba(10,5,5,0.8)',
+                  border: '1px solid rgba(139,0,0,0.3)',
+                  color: '#d4c5a9',
+                  fontFamily: 'var(--font-family-body), Cormorant Garamond, serif',
+                }}
+              />
+
+              <button
+                onClick={handleSubmitDefense}
+                disabled={!defenseText.trim()}
+                onMouseEnter={playHoverSound}
+                className="w-full py-3 rounded tracking-widest uppercase text-sm transition-all duration-300 disabled:opacity-40"
+                style={{
+                  fontFamily: 'var(--font-family-heading), Cinzel, serif',
+                  background: defenseText.trim() ? 'linear-gradient(135deg, rgba(139,0,0,0.8), rgba(100,0,0,0.9))' : 'rgba(40,20,20,0.5)',
+                  color: '#d4c5a9',
+                  border: '1px solid rgba(139,0,0,0.4)',
+                  cursor: defenseText.trim() ? 'pointer' : 'not-allowed'
+                }}
+              >
+                Submit Defense
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── DEFENSE SUBMITTED CONFIRMATION (for accused) ── */}
+      <AnimatePresence>
+        {isAccused && defenseSubmitted && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="absolute bottom-20 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded text-sm tracking-wider"
+            style={{
+              background: 'rgba(0,80,0,0.8)',
+              border: '1px solid rgba(0,180,0,0.3)',
+              color: 'rgba(150,255,150,0.9)',
+              fontFamily: 'var(--font-family-heading), Cinzel, serif'
+            }}
+          >
+            ✓ Defense submitted — awaiting voting
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── ACCUSED DEFENSE VIEW (shown to non-accused players) ── */}
+      <AnimatePresence>
+        {accusation?.defense && gameState === 'accusation' && !isAccused && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="absolute bottom-24 left-4 right-4 z-40 p-4 rounded"
+            style={{
+              background: 'rgba(20,40,20,0.9)',
+              border: '1px solid rgba(0,180,0,0.3)',
+              backdropFilter: 'blur(4px)'
+            }}
+          >
+            <p className="text-xs tracking-wider uppercase mb-1" style={{ color: 'rgba(150,255,150,0.6)', fontFamily: 'var(--font-family-heading), Cinzel, serif' }}>
+              🛡️ {accusation.accusedName}'s Defense:
+            </p>
+            <p className="text-sm leading-relaxed" style={{ color: 'rgba(200,230,200,0.9)' }}>
+              "{accusation.defense}"
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── START VOTING BUTTON (host, after accusation) ── */}
+      <AnimatePresence>
+        {isHost && gameState === 'accusation' && (
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="absolute bottom-4 left-1/2 -translate-x-1/2 z-50"
+          >
+            <button
+              onClick={handleStartVoting}
+              onMouseEnter={playHoverSound}
+              className="px-8 py-3 tracking-widest uppercase text-sm transition-all duration-300"
+              style={{
+                fontFamily: 'var(--font-family-heading), Cinzel, serif',
+                background: 'linear-gradient(135deg, rgba(80,40,0,0.9), rgba(139,90,0,0.9))',
+                color: '#daa520',
+                border: '1px solid rgba(218,165,32,0.4)',
+                boxShadow: '0 0 20px rgba(218,165,32,0.2)',
+                cursor: 'pointer',
+                borderRadius: '4px'
+              }}
+            >
+              ⚖️ Begin the Vote
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── ACCUSE MODAL ── */}
+      <AnimatePresence>
+        {showAccuseModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-50 flex items-center justify-center"
+            style={{ background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(4px)' }}
+            onClick={() => setShowAccuseModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className="w-full max-w-md mx-4 p-6 rounded-lg"
+              style={{
+                background: 'linear-gradient(160deg, rgba(15,8,8,0.99), rgba(30,10,10,0.99))',
+                border: '1px solid rgba(139,0,0,0.5)',
+                boxShadow: '0 0 50px rgba(139,0,0,0.25)'
+              }}
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="text-center mb-6">
+                <h2
+                  className="text-xl tracking-widest"
+                  style={{ fontFamily: 'var(--font-family-heading), Cinzel, serif', color: '#d4c5a9' }}
+                >
+                  ⚖️ Make an Accusation
+                </h2>
+                <p className="text-xs mt-2" style={{ color: 'rgba(200,160,120,0.5)' }}>
+                  Choose who you believe committed the murder
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-3">
+                {otherPlayers.map(player => (
+                  <button
+                    key={player.playerId}
+                    onClick={() => handleAccuse(player.playerId)}
+                    onMouseEnter={playHoverSound}
+                    className="flex items-center gap-4 p-4 rounded transition-all duration-200 text-left"
+                    style={{
+                      background: 'rgba(30,15,15,0.6)',
+                      border: '1px solid rgba(139,0,0,0.2)',
+                      cursor: 'pointer'
+                    }}
+                    onMouseOver={e => e.currentTarget.style.borderColor = 'rgba(139,0,0,0.6)'}
+                    onMouseOut={e => e.currentTarget.style.borderColor = 'rgba(139,0,0,0.2)'}
+                  >
+                    <div
+                      className="w-10 h-10 rounded-full flex items-center justify-center text-lg shrink-0"
+                      style={{ background: 'rgba(139,0,0,0.2)', border: '1px solid rgba(139,0,0,0.3)' }}
+                    >
+                      {['🕵️', '🧙', '💀', '🦇', '🐍', '🌙', '⚗️', '🗡️'][player.avatar % 8]}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium" style={{ color: '#d4c5a9', fontFamily: 'var(--font-family-heading), Cinzel, serif' }}>
+                        {player.name}
+                      </p>
+                      <p className="text-xs" style={{ color: 'rgba(200,160,120,0.5)' }}>
+                        {mystery?.suspects?.find(s => s.playerId === player.playerId)?.occupation || 'Unknown occupation'}
+                      </p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              <button
+                onClick={() => setShowAccuseModal(false)}
+                className="w-full mt-4 py-2 text-xs tracking-wider uppercase transition-colors"
+                style={{ color: 'rgba(200,160,120,0.4)', background: 'none', border: 'none', cursor: 'pointer' }}
+              >
+                [ Cancel ]
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Top Bar */}
       <div
         className="flex items-center justify-between px-6 py-4 border-b"
@@ -63,6 +397,24 @@ export default function RoomExploration() {
           </span>
         </div>
         <div className="flex items-center gap-4">
+          {/* Accuse button — only visible during investigation */}
+          {gameState === 'investigation' && otherPlayers.length > 0 && (
+            <button
+              onClick={() => { playClickSound(); setShowAccuseModal(true); }}
+              onMouseEnter={playHoverSound}
+              className="text-sm tracking-wider uppercase transition-all duration-300 px-4 py-1 rounded"
+              style={{
+                fontFamily: 'var(--font-family-heading), Cinzel, serif',
+                color: 'rgba(220,100,100,0.9)',
+                cursor: 'pointer',
+                background: 'rgba(139,0,0,0.15)',
+                border: '1px solid rgba(139,0,0,0.35)',
+              }}
+            >
+              ⚖️ Accuse
+            </button>
+          )}
+
           <button
             onClick={() => { playClickSound(); setShowMap(prev => !prev); }}
             onMouseEnter={playHoverSound}
@@ -81,6 +433,21 @@ export default function RoomExploration() {
           </button>
         </div>
       </div>
+
+      {/* Game state status bar */}
+      {gameState === 'accusation' && (
+        <div
+          className="px-6 py-2 flex items-center gap-3 text-xs tracking-wider"
+          style={{ background: 'rgba(80,0,0,0.5)', borderBottom: '1px solid rgba(139,0,0,0.3)' }}
+        >
+          <span className="animate-pulse" style={{ color: 'rgba(255,100,100,0.9)' }}>●</span>
+          <span style={{ color: 'rgba(200,120,120,0.9)', fontFamily: 'var(--font-family-heading), Cinzel, serif' }}>
+            {accusation?.defense
+              ? `${accusation.accusedName} has submitted their defense — awaiting vote`
+              : `${accusation?.accusedName} has ${defenseTimer}s to respond...`}
+          </span>
+        </div>
+      )}
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden relative">
@@ -216,7 +583,7 @@ export default function RoomExploration() {
                       {currentRoom.clues.map((clue, idx) => (
                         <button
                           key={idx}
-                          onClick={() => handleInspectClue(clue)}
+                          onClick={() => handleInspectClue(clue, currentRoomId, idx)}
                           onMouseEnter={playHoverSound}
                           className="text-left transition-all duration-300 group"
                           style={{
@@ -237,6 +604,11 @@ export default function RoomExploration() {
                             >
                               {clue.name}
                             </span>
+                            {discoveredClues.find(c => c.name === clue.name) && (
+                              <span className="text-xs px-2 py-0.5" style={{ color: 'rgba(100,200,100,0.7)', background: 'rgba(0,80,0,0.2)', border: '1px solid rgba(0,150,0,0.2)' }}>
+                                Examined
+                              </span>
+                            )}
                             {clue.isSupernatural && (
                               <span className="text-xs px-2 py-0.5" style={{ color: 'rgba(150, 100, 200, 0.7)', background: 'rgba(150, 100, 200, 0.1)', border: '1px solid rgba(150, 100, 200, 0.2)' }}>
                                 Eerie

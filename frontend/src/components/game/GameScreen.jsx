@@ -4,6 +4,8 @@ import { useVoice } from '../../contexts/VoiceContext.jsx';
 import { motion, AnimatePresence } from 'framer-motion';
 import { playClickSound, playHoverSound, setMuted } from '../../audio/audioEngine.js';
 import RoomExploration2D from './RoomExploration2D.jsx';
+import RoomExploration from './RoomExploration.jsx';
+import VotingModal from './VotingModal.jsx';
 
 /* ────────────────────────────────────────────────
    Inline styles object — keeps JSX clean
@@ -308,7 +310,19 @@ export default function GameScreen() {
 
   // ── Room Exploration Phase ──
   if (phase === 'exploring') {
+<<<<<<< Updated upstream
     return <RoomExploration2D />;
+=======
+    return (
+      <>
+        <RoomExploration />
+        {/* Voting modal overlays exploration when active */}
+        <AnimatePresence>
+          {(state.gameState === 'voting' || state.votingResults) && <VotingModal />}
+        </AnimatePresence>
+      </>
+    );
+>>>>>>> Stashed changes
   }
 
   // ── Briefing Phase ──
@@ -584,6 +598,7 @@ export default function GameScreen() {
               transition={{ duration: 0.3 }}
               style={{ ...S.contentInner, maxWidth: 900 }}
             >
+<<<<<<< Updated upstream
               <div
                 style={{
                   display: 'grid',
@@ -724,6 +739,32 @@ export default function GameScreen() {
                       </div>
                     ))}
                   </div>
+=======
+              {/* Timeline */}
+              <div>
+                <h3 className="game-title text-3xl mb-8 border-b border-[color:var(--color-blood-dark)] pb-4">Timeline</h3>
+                <div className="space-y-10 mt-6">
+                  {(mystery.timeline || []).map((event, idx) => (
+                    <div key={idx} className="relative pl-10 border-l-2 border-[color:var(--color-blood-dark)] py-1">
+                      <div className="absolute w-4 h-4 bg-[color:var(--color-blood-glow)] rounded-full -left-[9px] top-2 shadow-[0_0_15px_var(--color-blood)]" />
+                      <span className="font-[family-name:var(--font-family-heading)] text-[color:var(--color-gold)] text-base tracking-widest block mb-3 break-words">{event.time}</span>
+                      <p className="text-xl text-[color:var(--color-bone)] break-words whitespace-pre-wrap leading-relaxed">{event.event}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Clues */}
+              <div>
+                <h3 className="game-title text-3xl mb-8 border-b border-[color:var(--color-blood-dark)] pb-4">Initial Clues</h3>
+                <div className="space-y-8 mt-6">
+                  {(mystery.initialClues || []).map((clue, idx) => (
+                    <div key={idx} className="panel rounded overflow-hidden shadow-lg">
+                      <h4 className="panel-header text-lg">{clue.name}</h4>
+                      <p className="p-6 md:p-8 text-xl text-[color:var(--color-bone)] break-words whitespace-pre-wrap leading-relaxed">{clue.description}</p>
+                    </div>
+                  ))}
+>>>>>>> Stashed changes
                 </div>
               </div>
             </motion.div>

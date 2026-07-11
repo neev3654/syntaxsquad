@@ -3,9 +3,12 @@ import Room from '../models/Room.js';
 import GameHistory from '../models/GameHistory.js';
 import { generateUniqueRoomCode, sanitizeString, validateRoomSettings } from '../utils/roomUtils.js';
 import { generateMysteryData } from '../utils/aiService.js';
+import { generateReveal } from '../utils/revealService.js';
 
 // Track socket -> player mapping for reconnection
 const socketPlayerMap = new Map();
+// Track active timers per room (defense timers, voting timers)
+const roomTimers = new Map();
 
 // Track real-time 2D map positions
 const roomPlayerPositions = {};
@@ -434,6 +437,7 @@ export default function setupSocketHandlers(io) {
             room.mysteryData = await aiPromise;
 
             room.status = 'in-progress';
+            room.gameState = 'investigation';
             room.gameStartedAt = new Date();
             await room.save();
 
@@ -518,6 +522,327 @@ export default function setupSocketHandlers(io) {
     socket.on('ping-check', (data, callback) => {
       callback?.({ timestamp: Date.now() });
     });
+
+    // ══════════════════════════════════════════════════════
+    // ─── PHASE 6: ACCUSATION & VOTING ───
+    // ══════════════════════════════════════════════════════
+
+    // ─── CLUE DISCOVERED (sync clue discovery server-side) ───
+    socket.on('clue:discovered', async (data) => {
+      try {
+        const { roomCode, playerId, clueId } = data;
+        if (!clueId) return;
+
+        const room = await Room.findOne({ roomCode });
+        if (!room) return;
+
+        const player = room.players.find(p => p.playerId === playerId);
+        if (!player) return;
+
+        // Add clue if not already tracked
+        if (!room.discoveredClueIds.includes(clueId)) {
+          room.discoveredClueIds.push(clueId);
+          await room.save();
+
+          // Broadcast to all players so evidence board stays in sync
+          io.to(roomCode).emit('clue:discovered', { clueId, discoveredBy: player.name });
+        }
+      } catch (error) {
+        console.error('[Socket] clue:discovered error:', error);
+      }
+    });
+
+    // ─── PLAYER ACCUSE ───
+    socket.on('player:accuse', async (data, callback) => {
+      try {
+        const { roomCode, playerId, accusedPlayerId } = data;
+        const room = await Room.findOne({ roomCode });
+
+        if (!room) return callback?.({ success: false, error: 'Room not found' });
+        if (room.gameState !== 'investigation' && room.gameState !== 'accusation') {
+          return callback?.({ success: false, error: 'Accusation not allowed at this stage' });
+        }
+
+        const accuser = room.players.find(p => p.playerId === playerId);
+        if (!accuser) return callback?.({ success: false, error: 'Accuser not found' });
+
+        const accused = room.players.find(p => p.playerId === accusedPlayerId);
+        if (!accused) return callback?.({ success: false, error: 'Accused player not found' });
+
+        if (playerId === accusedPlayerId) {
+          return callback?.({ success: false, error: 'You cannot accuse yourself...' });
+        }
+
+        // Clear any existing defense timer for this room
+        clearRoomTimers(roomCode, 'defense');
+
+        // Store the accusation
+        room.accusation = {
+          accuserId: playerId,
+          accusedId: accusedPlayerId,
+          defense: null,
+          timestamp: new Date(),
+          isResolved: false
+        };
+        room.gameState = 'accusation';
+
+        room.messages.push({
+          playerId: 'system',
+          playerName: 'System',
+          content: `⚖️ ${accuser.name} has accused ${accused.name} of the murder!`,
+          type: 'accusation'
+        });
+
+        await room.save();
+
+        // Broadcast to all players
+        io.to(roomCode).emit('player:accused', {
+          accuserId: playerId,
+          accusedId: accusedPlayerId,
+          accuserName: accuser.name,
+          accusedName: accused.name
+        });
+        io.to(roomCode).emit('chat-message', {
+          playerId: 'system',
+          playerName: 'System',
+          content: `⚖️ ${accuser.name} has accused ${accused.name} of the murder!`,
+          type: 'accusation',
+          timestamp: new Date()
+        });
+
+        callback?.({ success: true });
+
+        // ── 60 second defense timer ──
+        const defenseTimer = setTimeout(async () => {
+          const freshRoom = await Room.findOne({ roomCode });
+          if (!freshRoom || freshRoom.gameState !== 'accusation') return;
+          if (freshRoom.accusation.isResolved) return;
+          // No defense submitted — auto-start voting
+          console.log(`[Phase6] Defense timeout for room ${roomCode}, auto-starting voting`);
+          await startVotingPhase(io, freshRoom);
+        }, 60000);
+
+        setRoomTimer(roomCode, 'defense', defenseTimer);
+
+      } catch (error) {
+        console.error('[Socket] player:accuse error:', error);
+        callback?.({ success: false, error: 'Accusation failed' });
+      }
+    });
+
+    // ─── PLAYER DEFEND ───
+    socket.on('player:defend', async (data, callback) => {
+      try {
+        const { roomCode, playerId, defenseText } = data;
+        const room = await Room.findOne({ roomCode });
+
+        if (!room) return callback?.({ success: false, error: 'Room not found' });
+        if (room.gameState !== 'accusation') {
+          return callback?.({ success: false, error: 'No active accusation' });
+        }
+        if (room.accusation.accusedId !== playerId) {
+          return callback?.({ success: false, error: 'You are not the accused' });
+        }
+
+        const sanitizedDefense = sanitizeString(defenseText, 500);
+        room.accusation.defense = sanitizedDefense;
+        room.accusation.isResolved = true;
+
+        room.messages.push({
+          playerId: 'system',
+          playerName: 'System',
+          content: `🛡️ ${room.players.find(p => p.playerId === playerId)?.name} has submitted their defense.`,
+          type: 'defense'
+        });
+
+        await room.save();
+
+        // Cancel the defense auto-timer
+        clearRoomTimers(roomCode, 'defense');
+
+        // Broadcast defense to all
+        io.to(roomCode).emit('player:defended', {
+          accusedId: playerId,
+          defenseText: sanitizedDefense
+        });
+        io.to(roomCode).emit('chat-message', {
+          playerId: 'system',
+          playerName: 'System',
+          content: `🛡️ ${room.players.find(p => p.playerId === playerId)?.name} has submitted their defense.`,
+          type: 'defense',
+          timestamp: new Date()
+        });
+
+        callback?.({ success: true });
+      } catch (error) {
+        console.error('[Socket] player:defend error:', error);
+        callback?.({ success: false, error: 'Defense submission failed' });
+      }
+    });
+
+    // ─── START VOTING ───
+    socket.on('player:startVoting', async (data, callback) => {
+      try {
+        const { roomCode, playerId } = data;
+        const room = await Room.findOne({ roomCode });
+
+        if (!room) return callback?.({ success: false, error: 'Room not found' });
+
+        // Allow host OR if accusation defense timer resolved
+        const isHost = room.hostId === playerId;
+        const canStart = isHost || room.gameState === 'accusation';
+        if (!canStart) {
+          return callback?.({ success: false, error: 'Only the host can start voting' });
+        }
+
+        clearRoomTimers(roomCode, 'defense');
+        await startVotingPhase(io, room);
+        callback?.({ success: true });
+      } catch (error) {
+        console.error('[Socket] player:startVoting error:', error);
+        callback?.({ success: false, error: 'Could not start voting' });
+      }
+    });
+
+    // ─── CAST VOTE ───
+    socket.on('player:castVote', async (data, callback) => {
+      try {
+        const { roomCode, playerId, suspectId } = data;
+        const room = await Room.findOne({ roomCode });
+
+        if (!room) return callback?.({ success: false, error: 'Room not found' });
+        if (!room.votingPhase.isActive) {
+          return callback?.({ success: false, error: 'Voting is not active' });
+        }
+        if (room.votingPhase.votesCast.includes(playerId)) {
+          return callback?.({ success: false, error: 'You have already voted' });
+        }
+
+        const player = room.players.find(p => p.playerId === playerId);
+        if (!player) return callback?.({ success: false, error: 'Player not found' });
+
+        // Store vote (suspectId here is the suspect name from mysteryData)
+        room.votes[playerId] = suspectId;
+        room.votingPhase.votesCast.push(playerId);
+
+        await room.save();
+
+        // Broadcast anonymously — just who voted, not what they voted
+        io.to(roomCode).emit('player:voted', {
+          playerId,
+          playerName: player.name,
+          votesCast: room.votingPhase.votesCast.length,
+          totalPlayers: room.players.filter(p => p.isConnected).length
+        });
+
+        callback?.({ success: true });
+
+        // Check if all connected players have voted → auto-end
+        const connectedCount = room.players.filter(p => p.isConnected).length;
+        if (room.votingPhase.votesCast.length >= connectedCount) {
+          clearRoomTimers(roomCode, 'voting');
+          await endVotingPhase(io, room);
+        }
+      } catch (error) {
+        console.error('[Socket] player:castVote error:', error);
+        callback?.({ success: false, error: 'Vote failed' });
+      }
+    });
+
+    // ─── REQUEST REVEAL ───
+    socket.on('game:requestReveal', async (data, callback) => {
+      try {
+        const { roomCode } = data;
+        const room = await Room.findOne({ roomCode });
+
+        if (!room) return callback?.({ success: false, error: 'Room not found' });
+        if (room.gameState !== 'reveal') {
+          return callback?.({ success: false, error: 'Game is not in reveal state' });
+        }
+
+        // If reveal already generated, send it immediately
+        if (room.revealData) {
+          socket.emit('game:revealData', room.revealData);
+          return callback?.({ success: true });
+        }
+
+        // Generate reveal
+        console.log(`[Phase7] Generating reveal for room ${roomCode}...`);
+        const revealData = await generateReveal(room);
+        room.revealData = revealData;
+        await room.save();
+
+        // Broadcast to ALL players
+        io.to(roomCode).emit('game:revealData', revealData);
+        callback?.({ success: true });
+      } catch (error) {
+        console.error('[Socket] game:requestReveal error:', error);
+        callback?.({ success: false, error: 'Failed to generate reveal' });
+      }
+    });
+
+    // ─── PLAY AGAIN ───
+    socket.on('game:playAgain', async (data, callback) => {
+      try {
+        const { roomCode, playerId } = data;
+        const room = await Room.findOne({ roomCode });
+
+        if (!room) return callback?.({ success: false, error: 'Room not found' });
+        if (room.hostId !== playerId) {
+          return callback?.({ success: false, error: 'Only the host can restart the game' });
+        }
+
+        // Clear all timers
+        clearRoomTimers(roomCode, 'defense');
+        clearRoomTimers(roomCode, 'voting');
+
+        // Reset game state
+        room.status = 'waiting';
+        room.gameState = 'investigation';
+        room.mysteryData = null;
+        room.accusation = {
+          accuserId: null,
+          accusedId: null,
+          defense: null,
+          timestamp: null,
+          isResolved: false
+        };
+        room.votes = {};
+        room.votingPhase = {
+          isActive: false,
+          startTime: null,
+          timeLimit: 120,
+          votesCast: []
+        };
+        room.gameOver = false;
+        room.revealData = null;
+        room.discoveredClueIds = [];
+        room.gameStartedAt = null;
+
+        // Reset player ready states
+        room.players.forEach(p => {
+          p.isReady = false;
+        });
+
+        room.messages.push({
+          playerId: 'system',
+          playerName: 'System',
+          content: '🔄 The spirits demand another round. The investigation begins anew...',
+          type: 'system'
+        });
+
+        await room.save();
+
+        io.to(roomCode).emit('game:playAgain', { room: formatRoomData(room) });
+        io.to(roomCode).emit('room-update', formatRoomData(room));
+        callback?.({ success: true });
+      } catch (error) {
+        console.error('[Socket] game:playAgain error:', error);
+        callback?.({ success: false, error: 'Failed to restart game' });
+      }
+    });
+
+    // ══════════════════════════════════════════════════════
 
     // ─── DISCONNECT ───
     socket.on('disconnect', async () => {
@@ -620,6 +945,113 @@ export default function setupSocketHandlers(io) {
   });
 }
 
+// ══════════════════════════════════════════════════════
+// ─── HELPER: Start Voting Phase ───
+// ══════════════════════════════════════════════════════
+async function startVotingPhase(io, room) {
+  const roomCode = room.roomCode;
+
+  room.votingPhase = {
+    isActive: true,
+    startTime: Date.now(),
+    timeLimit: 120,
+    votesCast: []
+  };
+  room.votes = {};
+  room.gameState = 'voting';
+  await room.save();
+
+  io.to(roomCode).emit('voting:started', {
+    timeLimit: room.votingPhase.timeLimit,
+    suspects: room.mysteryData?.suspects?.map(s => ({
+      name: s.name,
+      occupation: s.occupation,
+      physicalDescription: s.physicalDescription
+    })) || []
+  });
+
+  // Auto-end voting after timeLimit
+  const votingTimer = setTimeout(async () => {
+    const freshRoom = await Room.findOne({ roomCode });
+    if (!freshRoom || !freshRoom.votingPhase.isActive) return;
+    console.log(`[Phase6] Voting timeout for room ${roomCode}, auto-ending voting`);
+    await endVotingPhase(io, freshRoom);
+  }, room.votingPhase.timeLimit * 1000);
+
+  setRoomTimer(roomCode, 'voting', votingTimer);
+}
+
+// ══════════════════════════════════════════════════════
+// ─── HELPER: End Voting Phase ───
+// ══════════════════════════════════════════════════════
+async function endVotingPhase(io, room) {
+  const roomCode = room.roomCode;
+
+  room.votingPhase.isActive = false;
+  room.gameState = 'reveal';
+  room.gameOver = true;
+
+  // Tally votes
+  const voteCounts = {};
+  Object.values(room.votes).forEach(suspectName => {
+    voteCounts[suspectName] = (voteCounts[suspectName] || 0) + 1;
+  });
+
+  // Determine winner (most votes)
+  const sorted = Object.entries(voteCounts).sort((a, b) => b[1] - a[1]);
+  const winner = sorted[0]?.[0] || null;
+  const isTie = sorted.length > 1 && sorted[0][1] === sorted[1][1];
+
+  room.revealData = null; // Will be generated on request
+
+  await room.save();
+
+  // Broadcast results
+  io.to(roomCode).emit('voting:results', {
+    voteCounts,
+    winner,
+    isTie,
+    murderer: null // DO NOT reveal yet
+  });
+
+  // Transition to reveal state
+  io.to(roomCode).emit('game:stateChanged', { state: 'reveal' });
+
+  // Pre-generate the reveal in the background
+  generateReveal(room)
+    .then(async (revealData) => {
+      const freshRoom = await Room.findOne({ roomCode });
+      if (freshRoom) {
+        freshRoom.revealData = revealData;
+        await freshRoom.save();
+        // Broadcast to all players automatically
+        io.to(roomCode).emit('game:revealData', revealData);
+      }
+    })
+    .catch(err => console.error('[Phase7] Background reveal generation failed:', err));
+}
+
+// ══════════════════════════════════════════════════════
+// ─── HELPER: Timer management ───
+// ══════════════════════════════════════════════════════
+function setRoomTimer(roomCode, type, timer) {
+  if (!roomTimers.has(roomCode)) {
+    roomTimers.set(roomCode, {});
+  }
+  roomTimers.get(roomCode)[type] = timer;
+}
+
+function clearRoomTimers(roomCode, type) {
+  const timers = roomTimers.get(roomCode);
+  if (timers && timers[type]) {
+    clearTimeout(timers[type]);
+    delete timers[type];
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// ─── handlePlayerLeave ───
+// ══════════════════════════════════════════════════════
 async function handlePlayerLeave(io, socket, roomCode, playerId) {
   const room = await Room.findOne({ roomCode });
   if (!room) return;
@@ -669,7 +1101,30 @@ async function handlePlayerLeave(io, socket, roomCode, playerId) {
   });
 }
 
+// ══════════════════════════════════════════════════════
+// ─── formatRoomData (with sensitive data filtering) ───
+// ══════════════════════════════════════════════════════
 function formatRoomData(room) {
+  const isRevealed = room.gameState === 'reveal' || room.gameOver;
+
+  // Filter sensitive mystery fields during active game
+  let mysteryData = room.mysteryData;
+  if (mysteryData && !isRevealed) {
+    mysteryData = {
+      ...mysteryData,
+      murderer: undefined,
+      motive: undefined,
+      method: undefined,
+      opportunity: undefined,
+      // Strip private objectives from each suspect
+      suspects: (mysteryData.suspects || []).map(s => ({
+        ...s,
+        privateObjective: undefined,
+        secretRelationship: undefined
+      }))
+    };
+  }
+
   return {
     roomCode: room.roomCode,
     roomName: room.roomName,
@@ -681,6 +1136,8 @@ function formatRoomData(room) {
     isPrivate: room.isPrivate,
     isLocked: room.isLocked,
     status: room.status,
+    gameState: room.gameState,
+    gameOver: room.gameOver,
     players: room.players.map(p => ({
       playerId: p.playerId,
       name: p.name,
@@ -697,7 +1154,10 @@ function formatRoomData(room) {
       type: m.type,
       timestamp: m.timestamp
     })),
-    mysteryData: room.mysteryData,
+    mysteryData,
+    accusation: room.accusation,
+    votingPhase: room.votingPhase,
+    discoveredClueIds: room.discoveredClueIds,
     createdAt: room.createdAt
   };
 }

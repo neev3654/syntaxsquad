@@ -7,6 +7,7 @@ import IntroScreen from './components/IntroScreen.jsx';
 import MainMenu from './components/menu/MainMenu.jsx';
 import Lobby from './components/lobby/Lobby.jsx';
 import GameScreen from './components/game/GameScreen.jsx';
+import RevealScreen from './components/game/RevealScreen.jsx';
 import { motion, AnimatePresence } from 'framer-motion';
 import { playClickSound, playHoverSound } from './audio/audioEngine.js';
 
@@ -74,6 +75,8 @@ function AppContent() {
         )}
 
         {state.screen === 'game' && <GameScreen key="game" />}
+
+        {state.screen === 'reveal' && <RevealScreen key="reveal" />}
       </AnimatePresence>
 
       {/* Global Kicked Overlay */}
