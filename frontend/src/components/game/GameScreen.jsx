@@ -335,7 +335,7 @@ export default function GameScreen() {
 
         {/* Accuse button — shown during investigation */}
         {gameState === 'investigation' && otherPlayersForAccuse.length > 0 && (
-          <div style={{ position: 'fixed', top: 20, right: 24, zIndex: 60 }}>
+          <div style={{ position: 'fixed', bottom: 100, right: 24, zIndex: 60 }}>
             <button
               onClick={() => {
                 playClickSound();
