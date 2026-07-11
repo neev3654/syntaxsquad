@@ -16,6 +16,7 @@ function Lobby() {
   const { isMuted, toggleMute, micError } = useVoice();
   const { room, playerId } = state;
   const [musicMuted, setMusicMuted] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
 
   const toggleMusic = () => {
     setMusicMuted(prev => {
@@ -70,7 +71,7 @@ function Lobby() {
                   toggleMusic();
                 }}
                 onMouseEnter={playHoverSound}
-                className="horror-btn text-lg px-8 py-5"
+                className="premium-btn text-sm px-6 py-3"
                 style={{
                   borderColor: musicMuted ? 'rgba(74, 158, 74, 0.6)' : 'rgba(255, 60, 60, 0.6)',
                   color: musicMuted ? '#4ea366' : '#ff4d4d'
@@ -87,7 +88,7 @@ function Lobby() {
                   toggleMute();
                 }}
                 onMouseEnter={playHoverSound}
-                className="horror-btn text-lg px-8 py-5"
+                className="premium-btn text-sm px-6 py-3"
                 style={{
                   borderColor: isMuted ? 'rgba(74, 158, 74, 0.6)' : 'rgba(255, 60, 60, 0.6)',
                   color: isMuted ? '#4ea366' : '#ff4d4d'
@@ -105,7 +106,7 @@ function Lobby() {
                     actions.setReady(!myPlayer.isReady);
                   }}
                   onMouseEnter={playHoverSound}
-                  className="horror-btn text-lg px-12 py-5 relative overflow-hidden group"
+                  className="premium-btn text-sm px-8 py-3 relative overflow-hidden group"
                   style={{
                     borderColor: myPlayer.isReady ? 'rgba(255, 60, 60, 0.6)' : 'rgba(74, 158, 74, 0.8)',
                     backgroundColor: myPlayer.isReady ? 'rgba(255, 60, 60, 0.1)' : 'rgba(74, 158, 74, 0.15)',
@@ -130,7 +131,7 @@ function Lobby() {
                   }}
                   onMouseEnter={playHoverSound}
                   disabled={connectedPlayers.length < room.maxPlayers || connectedPlayers.some(p => !p.isReady && !p.isHost)}
-                  className="horror-btn text-lg px-12 py-5"
+                  className="premium-btn text-sm px-8 py-3"
                   style={{
                     borderColor: connectedPlayers.length >= room.maxPlayers && !connectedPlayers.some(p => !p.isReady && !p.isHost) ? 'rgba(184, 134, 11, 0.5)' : 'rgba(139, 0, 0, 0.15)',
                     opacity: connectedPlayers.length >= room.maxPlayers && !connectedPlayers.some(p => !p.isReady && !p.isHost) ? 1 : 0.6
@@ -152,7 +153,7 @@ function Lobby() {
                   navigate('/menu');
                 }}
                 onMouseEnter={playHoverSound}
-                className="horror-btn text-lg px-12 py-5"
+                className="premium-btn text-sm px-8 py-3"
                 style={{
                   borderColor: 'rgba(200, 50, 50, 0.5)',
                   color: 'rgba(255, 255, 255, 0.8)'
@@ -163,17 +164,44 @@ function Lobby() {
             </div>
           </div>
 
-          {/* Right Panel - Mission & Chat */}
+          {/* Right Panel - Mission (Chat removed) */}
           <div className="hidden lg:flex flex-col w-96 xl:w-[28rem] flex-shrink-0 gap-6">
             <div className="flex-none">
               <RightPanel room={room} ping={state.ping} isHost={isHost} />
             </div>
-            <div className="flex-1 min-h-0 flex flex-col">
-              <ChatPanel />
-            </div>
           </div>
         </div>
       </motion.div>
+
+      {/* Floating Chat Panel */}
+      <div className="fixed bottom-6 left-6 z-50 flex flex-col gap-4 items-start">
+        <AnimatePresence>
+          {isChatOpen && (
+            <motion.div
+              initial={{ opacity: 0, y: 20, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 20, scale: 0.95 }}
+              transition={{ duration: 0.2 }}
+              className="w-80 md:w-96 h-[400px] flex flex-col shadow-2xl rounded-xl overflow-hidden"
+            >
+              <ChatPanel />
+            </motion.div>
+          )}
+        </AnimatePresence>
+        
+        <button
+          onClick={() => { playClickSound(); setIsChatOpen(!isChatOpen); }}
+          onMouseEnter={playHoverSound}
+          className="premium-btn text-sm px-6 py-3 rounded-full flex items-center justify-center shadow-lg"
+          style={{ 
+            borderColor: isChatOpen ? 'rgba(74, 158, 74, 0.6)' : 'rgba(255, 255, 255, 0.2)', 
+            background: 'rgba(10, 10, 10, 0.8)',
+            color: isChatOpen ? '#4ea366' : 'var(--color-bone)'
+          }}
+        >
+          {isChatOpen ? 'Close Chat' : '💬 Open Chat'}
+        </button>
+      </div>
 
       {/* Countdown Overlay */}
       <AnimatePresence>

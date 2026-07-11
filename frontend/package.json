@@ -10,6 +10,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@fontsource/inter": "^5.2.8",
+    "@fontsource/outfit": "^5.2.8",
     "@livekit/components-react": "^2.9.23",
     "framer-motion": "^12.42.2",
     "livekit-client": "^2.20.1",

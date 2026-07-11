@@ -61,15 +61,15 @@ function ChatPanel() {
 
   return (
     <div 
-      className="flex flex-col h-full w-full"
-      style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.04)' }}
+      className="flex flex-col h-full w-full glass-panel"
+      style={{ borderTop: 'none', borderBottom: 'none', borderRight: 'none' }}
     >
       {/* Header */}
       <div 
-        className="px-5 py-3"
-        style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', fontFamily: 'monospace' }}
+        className="px-5 py-4"
+        style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }}
       >
-        <span className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.4)' }}>
+        <span className="text-sm uppercase tracking-widest text-stone-400 font-bold" style={{ fontFamily: 'var(--font-family-heading)' }}>
           Chat
         </span>
       </div>
@@ -77,8 +77,8 @@ function ChatPanel() {
       {/* Messages */}
       <div 
         ref={messagesContainerRef}
-        className="flex-1 overflow-y-auto px-5 py-3 space-y-1" 
-        style={{ fontFamily: 'monospace', fontSize: '0.8rem' }}
+        className="flex-1 overflow-y-auto px-5 py-4 space-y-2" 
+        style={{ fontFamily: 'var(--font-family-body)', fontSize: '0.9rem' }}
       >
         {messages.map((msg, i) => (
           <div key={`${msg.timestamp || ''}-${i}`} style={{ color: getMessageColor(msg.type) }}>
@@ -103,8 +103,8 @@ function ChatPanel() {
       {/* Input */}
       <form 
         onSubmit={handleSubmit} 
-        className="px-5 py-3"
-        style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}
+        className="px-5 py-4"
+        style={{ borderTop: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(0,0,0,0.2)' }}
       >
         <input
           type="text"
@@ -115,9 +115,9 @@ function ChatPanel() {
           placeholder="> type here..."
           className="w-full bg-transparent border-none outline-none text-sm"
           style={{ 
-            color: 'rgba(255,255,255,0.7)', 
-            fontFamily: 'monospace',
-            fontSize: '0.8rem'
+            color: 'rgba(255,255,255,0.9)', 
+            fontFamily: 'var(--font-family-body)',
+            fontSize: '0.95rem'
           }}
         />
       </form>

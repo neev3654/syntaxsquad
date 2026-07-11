@@ -30,19 +30,20 @@ function LobbyHeader({ room, isHost }) {
     <div 
       className="flex-shrink-0 px-6 md:px-10 py-6"
       style={{ 
-        borderBottom: '1px solid rgba(139, 0, 0, 0.25)',
-        background: 'rgba(12, 10, 10, 0.96)'
+        borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+        background: 'rgba(10, 10, 10, 0.8)',
+        backdropFilter: 'blur(12px)'
       }}
     >
       <div className="grid grid-cols-3 items-center w-full">
         {/* Left: Session name / general details */}
         <div className="flex flex-col gap-1 items-start text-stone-300">
-          <span className="text-xs uppercase tracking-widest text-stone-500" style={{ fontFamily: 'var(--font-family-old), IM Fell English, serif' }}>
+          <span className="text-xs uppercase tracking-widest text-stone-400 font-semibold" style={{ fontFamily: 'var(--font-family-body)' }}>
             Current Session
           </span>
           <span 
-            className="text-lg md:text-xl font-normal"
-            style={{ color: '#fff', fontFamily: 'var(--font-family-heading), Cinzel, serif' }}
+            className="text-lg md:text-xl font-bold"
+            style={{ color: '#fff', fontFamily: 'var(--font-family-heading)' }}
           >
             {room.roomName}
           </span>
@@ -52,7 +53,7 @@ function LobbyHeader({ room, isHost }) {
         <div className="flex flex-col items-center justify-center">
           <span
             className="text-4xl md:text-5xl font-bold tracking-widest leading-none text-stone-100"
-            style={{ fontFamily: 'var(--font-family-heading), Cinzel, serif' }}
+            style={{ fontFamily: 'var(--font-family-heading)' }}
           >
             {room.roomCode}
           </span>
@@ -60,12 +61,12 @@ function LobbyHeader({ room, isHost }) {
           <button
             onClick={copyCode}
             onMouseEnter={playHoverSound}
-            className="text-xs text-stone-500 hover:text-stone-300 transition-colors duration-200 mt-2 uppercase tracking-widest"
+            className="text-xs text-stone-400 hover:text-stone-200 transition-colors duration-200 mt-2 uppercase tracking-widest font-semibold"
             style={{ 
               cursor: 'pointer',
               background: 'none',
               border: 'none',
-              fontFamily: 'var(--font-family-old), IM Fell English, serif',
+              fontFamily: 'var(--font-family-body)',
             }}
           >
             [{copied ? 'copied' : 'copy code'}]
@@ -74,11 +75,11 @@ function LobbyHeader({ room, isHost }) {
 
         {/* Right: Players + Status & Host controls */}
         <div className="flex items-center justify-end gap-6 text-stone-300">
-          <div className="flex flex-col items-end gap-1" style={{ fontFamily: 'var(--font-family-old), IM Fell English, serif' }}>
+          <div className="flex flex-col items-end gap-1 font-medium" style={{ fontFamily: 'var(--font-family-body)' }}>
             <span className="text-sm">
               Players: <span className="font-bold text-stone-100">{connectedCount}</span> / {room.maxPlayers}
             </span>
-            <span className="text-xs text-stone-500 uppercase tracking-wider">
+            <span className="text-xs text-stone-400 uppercase tracking-wider font-semibold">
               {room.isLocked ? '🔒 Private' : '🔓 Open'}
             </span>
           </div>
@@ -88,12 +89,12 @@ function LobbyHeader({ room, isHost }) {
               <button
                 onClick={() => { playClickSound(); actions.lockRoom(!room.isLocked); }}
                 onMouseEnter={playHoverSound}
-                className="text-sm text-stone-400 hover:text-stone-200 transition-colors uppercase tracking-widest"
+                className="text-sm text-stone-300 hover:text-stone-100 transition-colors uppercase tracking-widest font-semibold"
                 style={{ 
                   cursor: 'pointer',
                   background: 'none',
                   border: 'none',
-                  fontFamily: 'var(--font-family-heading), Cinzel, serif'
+                  fontFamily: 'var(--font-family-heading)'
                 }}
               >
                 [{room.isLocked ? 'unlock' : 'lock'}]
@@ -101,12 +102,12 @@ function LobbyHeader({ room, isHost }) {
               <button
                 onClick={() => { playClickSound(); actions.closeRoom(); }}
                 onMouseEnter={playHoverSound}
-                className="text-sm text-red-800 hover:text-red-600 transition-colors uppercase tracking-widest"
+                className="text-sm text-red-500 hover:text-red-400 transition-colors uppercase tracking-widest font-semibold"
                 style={{ 
                   cursor: 'pointer',
                   background: 'none',
                   border: 'none',
-                  fontFamily: 'var(--font-family-heading), Cinzel, serif'
+                  fontFamily: 'var(--font-family-heading)'
                 }}
               >
                 [close]
