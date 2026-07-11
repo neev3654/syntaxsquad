@@ -114,30 +114,133 @@ function mergeRooms(aiRooms) {
 }
 
 function getFallbackMystery(playerCount) {
-  // Simple fallback in case Ollama is unreachable
+  // Predefined rich gothic suspects to ensure variety when AI is unreachable
+  const PREDEFINED_SUSPECTS = [
+    {
+      name: "Evelyn Sinclair",
+      occupation: "Antiquarian",
+      physicalDescription: "A pale woman in a high-collared velvet dress, constantly adjusting wire-rimmed spectacles.",
+      publicBackground: "The victim's personal curator, known to have argued over a rare grimoire.",
+      privateObjective: "Conceal that you stole a forbidden text from the victim's study.",
+      hiddenInformation: "You saw someone running from the conservatory at 11:30 PM.",
+      secretRelationship: "Secretly hired by a rival house to retrieve occult artifacts."
+    },
+    {
+      name: "Arthur Pendelton",
+      occupation: "Family Solicitor",
+      physicalDescription: "A stout man with a nervous twitch, wearing a worn tweed suit smelling of stale tobacco.",
+      publicBackground: "Drafted the victim's new secret will just three days ago.",
+      privateObjective: "Make sure no one discovers the forgery in the inheritance papers.",
+      hiddenInformation: "You overheard the victim arguing about blackmail in the library.",
+      secretRelationship: "The victim's secret debtor, facing ruin if exposed."
+    },
+    {
+      name: "Dr. Victor Thorne",
+      occupation: "Apothecary",
+      physicalDescription: "Tall, thin, with silvering temples and sharp, cold, analytical eyes.",
+      publicBackground: "Supplied the victim with experimental sleep draughts.",
+      privateObjective: "Find your missing journal before someone reads your toxic experiments.",
+      hiddenInformation: "A bottle of nightshade went missing from your doctor's bag earlier.",
+      secretRelationship: "The victim's secret supplier of illicit, mind-altering tinctures."
+    },
+    {
+      name: "Lady Beatrice Vance",
+      occupation: "Spiritualist",
+      physicalDescription: "Draped in black lace and heavy jade amulets, smelling faintly of lavender and incense.",
+      publicBackground: "Conducted a private, tense séance with the victim the night before.",
+      privateObjective: "Keep the secret that you are a fraud and the victim found out.",
+      hiddenInformation: "You felt an icy draft and heard floorboards creak outside the study at midnight.",
+      secretRelationship: "Ex-lover of the victim from many decades ago."
+    },
+    {
+      name: "Julian Crane",
+      occupation: "Disgraced Artist",
+      physicalDescription: "Wild dark hair, paint-stained fingers, and a paint-splattered black frock coat.",
+      publicBackground: "Painted the victim's portrait; rumored to be deeply infatuated with the victim's spouse.",
+      privateObjective: "Frame another guest to protect your secret lover.",
+      hiddenInformation: "You saw a figure sneaking poison vials into a goblet in the dining room.",
+      secretRelationship: "Secretly having an affair with the victim's spouse."
+    },
+    {
+      name: "Meredith Gable",
+      occupation: "Head Housekeeper",
+      physicalDescription: "Stern countenance, hair pinned back tightly, wearing a spotless black uniform.",
+      publicBackground: "Worked at the manor for twenty years; knows every secret passage and hidden drawer.",
+      privateObjective: "Hide the fact that you stole the victim's expensive family heirloom.",
+      hiddenInformation: "The secret passage from the library to the study was left open at 11 PM.",
+      secretRelationship: "Half-sibling of the victim, unrecognized in the family lineage."
+    },
+    {
+      name: "Father Thomas",
+      occupation: "Parish Priest",
+      physicalDescription: "Slightly disheveled cassock, clutches a silver rosary, eyes dark with worry.",
+      publicBackground: "Received a final confession from the victim hours before the death.",
+      privateObjective: "Ensure the confession secret never leaves the room.",
+      hiddenInformation: "The victim confessed that one of the guests was trying to poison him.",
+      secretRelationship: "The victim's spiritual advisor and keeper of dark family secrets."
+    },
+    {
+      name: "Clara Harlow",
+      occupation: "Orphan Ward",
+      physicalDescription: "Nervous disposition, clad in a dark mourning gown, pale skin.",
+      publicBackground: "The victim's ward; stood to lose her entire inheritance upon marriage.",
+      privateObjective: "Conceal your secret engagement to a rival heir.",
+      hiddenInformation: "You heard the victim's voice pleading with someone shortly before midnight.",
+      secretRelationship: "The victim's illegitimate child, kept as a ward to avoid scandal."
+    }
+  ];
+
+  // Dynamically assign names and details based on pre-defined lists
+  const selectedSuspects = Array.from({ length: playerCount }).map((_, i) => {
+    const template = PREDEFINED_SUSPECTS[i % PREDEFINED_SUSPECTS.length];
+    return {
+      name: template.name,
+      age: 20 + (i * 5),
+      occupation: template.occupation,
+      physicalDescription: template.physicalDescription,
+      publicBackground: template.publicBackground,
+      privateObjective: template.privateObjective,
+      hiddenInformation: template.hiddenInformation,
+      secretRelationship: template.secretRelationship
+    };
+  });
+
   return {
-    victim: { name: "Lord Alistair Blackwood", backstory: "Wealthy aristocrat with many enemies." },
+    victim: { name: "Lord Alistair Blackwood", backstory: "Wealthy aristocrat with many dark secrets." },
     location: { name: "Blackwood Manor", description: "A dark, looming estate rumoured to be haunted." },
-    suspects: Array.from({ length: playerCount }).map((_, i) => ({
-      name: `Guest ${i + 1}`,
-      age: 30 + i,
-      occupation: "Socialite",
-      physicalDescription: "Suspiciously well-dressed.",
-      publicBackground: "An old friend of the victim.",
-      privateObjective: "Hide your massive debts.",
-      hiddenInformation: "You heard a scream at midnight.",
-      secretRelationship: "You were blackmailing the victim."
-    })),
-    timeline: [{ time: "23:00", event: "The lights went out." }],
-    initialClues: [{ name: "Shattered Glass", description: "Found near the body." }],
-    rooms: DEFAULT_ROOMS.map(room => ({
+    suspects: selectedSuspects,
+    timeline: [
+      { time: "22:00", event: "The guests arrived for dinner." },
+      { time: "23:00", event: "A sudden power outage plunged the mansion into darkness." },
+      { time: "23:30", event: "A muffled scream echoed from the study." },
+      { time: "00:00", event: "Lord Blackwood was found lifeless in his chair." }
+    ],
+    initialClues: [
+      { name: "Shattered Wine Goblet", description: "Found spilled near the victim's desk, smelling of bitter almonds." },
+      { name: "Muddy Shoe Print", description: "A heavy footprint tracked onto the study rug from the gardens." }
+    ],
+    rooms: [
+      { id: 'hallway', name: 'Hallway', description: 'A dark, echoing entrance hallway.' },
+      { id: 'garage', name: 'Garage', description: 'Oil stains and rusty tools.' },
+      { id: 'basement', name: 'Basement', description: 'Cold stone and forgotten barrels.' },
+      { id: 'library', name: 'Library', description: 'Towering shelves of decaying books.' },
+      { id: 'kitchen', name: 'Kitchen', description: 'Smells of rotting meat and iron.' },
+      { id: 'study', name: 'Study', description: 'A messy desk covered in frantic writings.' },
+      { id: 'dining_room', name: 'Dining Room', description: 'A long table set for a feast that never happened.' },
+      { id: 'room_1', name: 'Master Bedroom', description: 'An ornate bed with torn velvet curtains.' },
+      { id: 'bathroom', name: 'Bathroom', description: 'A cracked mirror and a rusted tub.' },
+      { id: 'conservatory', name: 'Conservatory', description: 'Overgrown dead plants.' },
+      { id: 'room_2', name: 'Billiard Room', description: 'A dusty pool table.' },
+      { id: 'observatory', name: 'Observatory', description: 'A large brass telescope pointed at the stars.' },
+      { id: 'room_3', name: 'Guest Bedroom', description: 'An unsettlingly neat bed.' }
+    ].map(room => ({
       ...room,
       clues: getFallbackCluesForRoom(room.id)
     })),
-    murderer: "Guest 1",
-    motive: "Money.",
-    method: "Poison.",
-    opportunity: "Was alone with the victim's drink.",
+    murderer: selectedSuspects[0].name,
+    motive: "Greed and revenge.",
+    method: "Cyanide poison in the wine goblet.",
+    opportunity: "Had private access to the study during the power outage.",
     hiddenEvents: [{ trigger: "Investigate study", eventDescription: "A painting falls off the wall." }]
   };
 }
