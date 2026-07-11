@@ -10,6 +10,52 @@ const socketPlayerMap = new Map();
 // Track real-time 2D map positions
 const roomPlayerPositions = {};
 
+// Pre-generated mystery promises keyed by roomCode
+const roomMysteryPromises = new Map();
+
+/**
+ * Start (or restart) mystery generation for a room in the background.
+ * Stores the resulting promise in roomMysteryPromises so it can be
+ * awaited later when the game actually starts.
+ */
+function startMysteryPreGeneration(room) {
+  const roomCode = room.roomCode;
+  const targetCount = room.maxPlayers || room.players.length;
+  console.log(`[AI] Pre-generating mystery for room ${roomCode} (${targetCount} players)`);
+
+  // Build a placeholder players array matching maxPlayers so the AI
+  // generates the correct number of characters/suspects up front.
+  const placeholderPlayers = Array.from({ length: targetCount }, (_, i) => ({
+    playerId: room.players[i]?.playerId || `placeholder-${i}`,
+    name: room.players[i]?.name || `Player ${i + 1}`
+  }));
+
+  const promise = generateMysteryData(placeholderPlayers)
+    .then(mystery => {
+      if (mystery && mystery.suspects) {
+        // Re-fetch the room to get the latest player list at resolution time
+        return Room.findOne({ roomCode }).then(latestRoom => {
+          if (latestRoom) {
+            mystery.suspects.forEach((suspect, index) => {
+              if (latestRoom.players[index]) {
+                suspect.playerId = latestRoom.players[index].playerId;
+              }
+            });
+          }
+          return mystery;
+        });
+      }
+      return mystery;
+    })
+    .catch(err => {
+      console.error(`[AI] Pre-generation error for room ${roomCode}:`, err);
+      return null;
+    });
+
+  roomMysteryPromises.set(roomCode, promise);
+  return promise;
+}
+
 export default function setupSocketHandlers(io) {
   io.on('connection', (socket) => {
     console.log(`[Socket] Connected: ${socket.id}`);
@@ -57,6 +103,9 @@ export default function setupSocketHandlers(io) {
 
         socketPlayerMap.set(socket.id, { playerId, roomCode });
         socket.join(roomCode);
+
+        // Pre-generate mystery data as soon as the room is created
+        startMysteryPreGeneration(room);
 
         console.log(`[Room] Created: ${roomCode} by ${hostName}`);
 
@@ -131,6 +180,7 @@ export default function setupSocketHandlers(io) {
 
         socketPlayerMap.set(socket.id, { playerId, roomCode });
         socket.join(roomCode);
+
 
         // Notify everyone in the room
         io.to(roomCode).emit('room-update', formatRoomData(room));
@@ -396,11 +446,13 @@ export default function setupSocketHandlers(io) {
         io.to(roomCode).emit('room-update', formatRoomData(room));
         callback?.({ success: true });
 
-        // Kick off AI generation immediately
+        // Use the pre-generated mystery promise (started at room/lobby creation).
+        // If none exists (edge case), start generation now as a fallback.
         let aiResolved = false;
-        const aiPromise = generateMysteryData(room.players)
+        const aiPromise = (roomMysteryPromises.get(roomCode) || startMysteryPreGeneration(room))
           .then(mystery => {
             aiResolved = true;
+            // Re-map suspect playerIds to the final player list
             if (mystery && mystery.suspects) {
               mystery.suspects.forEach((suspect, index) => {
                 if (room.players[index]) {
@@ -436,6 +488,9 @@ export default function setupSocketHandlers(io) {
             room.status = 'in-progress';
             room.gameStartedAt = new Date();
             await room.save();
+
+            // Clean up the pre-generation promise
+            roomMysteryPromises.delete(roomCode);
 
             io.to(roomCode).emit('game-started', { 
               message: 'The ritual has begun...',
@@ -498,6 +553,9 @@ export default function setupSocketHandlers(io) {
 
         room.status = 'closed';
         await room.save();
+
+        // Clean up pre-generated mystery for this room
+        roomMysteryPromises.delete(roomCode);
 
         io.to(roomCode).emit('room-closed', { message: 'The mansion has sealed its doors forever...' });
 
