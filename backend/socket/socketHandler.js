@@ -533,13 +533,17 @@ export default function setupSocketHandlers(io) {
     // ─── PRIVATE CHAT ───
     socket.on('request-private-chat', (data) => {
       // data: { roomCode, fromPlayerId, toPlayerId, fromPlayerName }
+      console.log('[Socket] request-private-chat received:', data);
       const { roomCode, fromPlayerId, toPlayerId, fromPlayerName } = data;
       
       // Find the target player's socket
       Room.findOne({ roomCode }).then(room => {
         if (!room) return;
+        console.log('[Socket] Found room:', roomCode, room.players);
         const targetPlayer = room.players.find(p => p.playerId === toPlayerId);
+        console.log('[Socket] Target player:', targetPlayer);
         if (targetPlayer && targetPlayer.socketId) {
+          console.log('[Socket] Sending private-chat-request to:', targetPlayer.socketId);
           io.to(targetPlayer.socketId).emit('private-chat-request', {
             fromPlayerId,
             fromPlayerName,
@@ -551,6 +555,7 @@ export default function setupSocketHandlers(io) {
 
     socket.on('accept-private-chat', (data) => {
       // data: { roomCode, fromPlayerId, toPlayerId, toPlayerName }
+      console.log('[Socket] accept-private-chat received:', data);
       const { roomCode, fromPlayerId, toPlayerId, toPlayerName } = data;
       
       // Find both players' sockets
@@ -558,8 +563,9 @@ export default function setupSocketHandlers(io) {
         if (!room) return;
         const fromPlayer = room.players.find(p => p.playerId === fromPlayerId);
         const toPlayer = room.players.find(p => p.playerId === toPlayerId);
-        
+        console.log('[Socket] accept - fromPlayer:', fromPlayer, 'toPlayer:', toPlayer);
         if (fromPlayer && fromPlayer.socketId && toPlayer && toPlayer.socketId) {
+          console.log('[Socket] Sending private-chat-started to both players');
           io.to(fromPlayer.socketId).emit('private-chat-started', {
             otherPlayerId: toPlayerId,
             otherPlayerName: toPlayerName
@@ -574,6 +580,7 @@ export default function setupSocketHandlers(io) {
 
     socket.on('private-message', (data) => {
       // data: { roomCode, fromPlayerId, toPlayerId, fromPlayerName, content }
+      console.log('[Socket] private-message received:', data);
       const { roomCode, fromPlayerId, toPlayerId, fromPlayerName, content } = data;
       
       if (!content || content.trim().length === 0) return;
@@ -583,6 +590,7 @@ export default function setupSocketHandlers(io) {
       Room.findOne({ roomCode }).then(room => {
         if (!room) return;
         const targetPlayer = room.players.find(p => p.playerId === toPlayerId);
+        console.log('[Socket] private-message targetPlayer:', targetPlayer);
         if (targetPlayer && targetPlayer.socketId) {
           const message = {
             fromPlayerId,
@@ -591,6 +599,7 @@ export default function setupSocketHandlers(io) {
             content: sanitizedContent,
             timestamp: new Date()
           };
+          console.log('[Socket] Sending private-message to:', targetPlayer.socketId, message);
           io.to(targetPlayer.socketId).emit('private-message', message);
         }
       }).catch(err => console.error('[Socket] private-message error:', err));

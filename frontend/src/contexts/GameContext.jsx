@@ -127,19 +127,23 @@ export function GameProvider({ children }) {
     });
 
     socket.on('chat-message', (message) => {
+      console.log('[GameContext] chat-message received:', message);
       dispatch({ type: 'ADD_CHAT_MESSAGE', payload: message });
     });
 
     // Private chat events
     socket.on('private-chat-request', (data) => {
+      console.log('[GameContext] private-chat-request received:', data);
       dispatch({ type: 'SET_PRIVATE_CHAT_REQUEST', payload: data });
     });
 
     socket.on('private-chat-started', (data) => {
+      console.log('[GameContext] private-chat-started received:', data);
       dispatch({ type: 'START_PRIVATE_CHAT', payload: data });
     });
 
     socket.on('private-message', (message) => {
+      console.log('[GameContext] private-message received:', message);
       dispatch({ type: 'ADD_PRIVATE_MESSAGE', payload: message });
     });
 
@@ -287,49 +291,60 @@ export function GameProvider({ children }) {
   }, [state.roomCode, state.playerId]);
 
   // Private chat actions
-  const requestPrivateChat = useCallback((toPlayerId) => {
-    socket.emit('request-private-chat', {
-      roomCode: state.roomCode,
-      fromPlayerId: state.playerId,
-      toPlayerId,
-      fromPlayerName: state.playerName
-    });
-  }, [state.roomCode, state.playerId, state.playerName]);
+    const requestPrivateChat = useCallback((toPlayerId) => {
+      console.log('[GameContext] requestPrivateChat called with:', toPlayerId, {
+        roomCode: state.roomCode,
+        fromPlayerId: state.playerId,
+        toPlayerId,
+        fromPlayerName: state.playerName
+      });
+      socket.emit('request-private-chat', {
+        roomCode: state.roomCode,
+        fromPlayerId: state.playerId,
+        toPlayerId,
+        fromPlayerName: state.playerName
+      });
+    }, [state.roomCode, state.playerId, state.playerName]);
 
-  const acceptPrivateChat = useCallback((fromPlayerId, fromPlayerName) => {
-    socket.emit('accept-private-chat', {
-      roomCode: state.roomCode,
-      fromPlayerId,
-      toPlayerId: state.playerId,
-      toPlayerName: state.playerName
-    });
-  }, [state.roomCode, state.playerId, state.playerName]);
+    const acceptPrivateChat = useCallback((fromPlayerId, fromPlayerName) => {
+      console.log('[GameContext] acceptPrivateChat called with:', fromPlayerId, fromPlayerName);
+      socket.emit('accept-private-chat', {
+        roomCode: state.roomCode,
+        fromPlayerId,
+        toPlayerId: state.playerId,
+        toPlayerName: state.playerName
+      });
+    }, [state.roomCode, state.playerId, state.playerName]);
 
-  const rejectPrivateChat = useCallback(() => {
-    dispatch({ type: 'CLEAR_PRIVATE_CHAT_REQUEST' });
-  }, []);
+    const rejectPrivateChat = useCallback(() => {
+      console.log('[GameContext] rejectPrivateChat called');
+      dispatch({ type: 'CLEAR_PRIVATE_CHAT_REQUEST' });
+    }, []);
 
-  const sendPrivateMessage = useCallback((content) => {
-    if (!state.activePrivateChat) return;
-    socket.emit('private-message', {
-      roomCode: state.roomCode,
-      fromPlayerId: state.playerId,
-      toPlayerId: state.activePrivateChat.otherPlayerId,
-      fromPlayerName: state.playerName,
-      content
-    });
-    // Also add the message to our own local state
-    dispatch({
-      type: 'ADD_PRIVATE_MESSAGE',
-      payload: {
+    const sendPrivateMessage = useCallback((content) => {
+      console.log('[GameContext] sendPrivateMessage called with:', content);
+      if (!state.activePrivateChat) return;
+      socket.emit('private-message', {
+        roomCode: state.roomCode,
+        fromPlayerId: state.playerId,
+        toPlayerId: state.activePrivateChat.otherPlayerId,
+        fromPlayerName: state.playerName,
+        content
+      });
+      // Also add the message to our own local state
+      const newMessage = {
         fromPlayerId: state.playerId,
         toPlayerId: state.activePrivateChat.otherPlayerId,
         fromPlayerName: state.playerName,
         content,
         timestamp: new Date()
-      }
-    });
-  }, [state.roomCode, state.playerId, state.playerName, state.activePrivateChat]);
+      };
+      console.log('[GameContext] Adding message to local state:', newMessage);
+      dispatch({
+        type: 'ADD_PRIVATE_MESSAGE',
+        payload: newMessage
+      });
+    }, [state.roomCode, state.playerId, state.playerName, state.activePrivateChat]);
 
   const endPrivateChat = useCallback(() => {
     dispatch({ type: 'END_PRIVATE_CHAT' });

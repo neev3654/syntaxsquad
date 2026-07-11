@@ -91,6 +91,7 @@ export default function RoomExploration2D() {
   const [showSuspects, setShowSuspects] = useState(false);
   const [nearbyPlayer, setNearbyPlayer] = useState(null); // { playerId, name }
   const [privateChatInput, setPrivateChatInput] = useState('');
+  const [cluePositions, setCluePositions] = useState({}); // { clueId: { x, y } }
   
   const mapRef = useRef(null);
   const wasMovingRef = useRef(false);
@@ -113,26 +114,53 @@ export default function RoomExploration2D() {
     });
   }, [rooms]);
 
-  // Distribute clues within their rooms based on the new static layout
+  // Generate random clue positions when mappedRooms changes
+  useEffect(() => {
+    const newPositions = {};
+    mappedRooms.forEach(room => {
+      if (room.clues) {
+        room.clues.forEach((clue) => {
+          const clueId = `${room.id}-${clue.name}`;
+          // Only generate position if it doesn't already exist
+          if (!cluePositions[clueId]) {
+            // Random position within room, leaving some padding
+            const offsetX = 50 + Math.random() * (room.width - 100);
+            const offsetY = 50 + Math.random() * (room.height - 100);
+            newPositions[clueId] = {
+              x: room.x + offsetX,
+              y: room.y + offsetY
+            };
+          }
+        });
+      }
+    });
+    if (Object.keys(newPositions).length > 0) {
+      setCluePositions(prev => ({ ...prev, ...newPositions }));
+    }
+  }, [mappedRooms]);
+
+  // Distribute clues within their rooms
   const cluesData = useMemo(() => {
     const allClues = [];
     mappedRooms.forEach(room => {
       if (room.clues) {
-        room.clues.forEach((clue, index) => {
-          const offsetX = 50 + (index % 3) * 100;
-          const offsetY = 50 + Math.floor(index / 3) * 100;
-          allClues.push({
-            ...clue,
-            id: `${room.id}-${clue.name}`,
-            roomId: room.id,
-            x: room.x + offsetX,
-            y: room.y + offsetY
-          });
+        room.clues.forEach((clue) => {
+          const clueId = `${room.id}-${clue.name}`;
+          const pos = cluePositions[clueId];
+          if (pos) {
+            allClues.push({
+              ...clue,
+              id: clueId,
+              roomId: room.id,
+              x: pos.x,
+              y: pos.y
+            });
+          }
         });
       }
     });
     return allClues;
-  }, [mappedRooms]);
+  }, [mappedRooms, cluePositions]);
 
   // Handle local player movement
   const handleMove = (x, y, direction, isMoving) => {
@@ -273,7 +301,7 @@ export default function RoomExploration2D() {
           setDiscoveredClues(prev => [...prev, nearbyClue]);
         }
       } else if (e.key.toLowerCase() === 't' && nearbyPlayer && !state.activePrivateChat && !state.privateChatRequest) {
-        // Request private chat
+        console.log('[RoomExploration2D] Pressing [T], requesting private chat with:', nearbyPlayer);
         actions.requestPrivateChat(nearbyPlayer.playerId);
       } else if (e.key === 'Escape') {
         if (inspectedClue) {

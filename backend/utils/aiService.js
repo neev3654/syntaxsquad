@@ -149,30 +149,65 @@ function getFallbackCluesForRoom(roomId) {
       { name: "Muddy Footprints", description: "Someone walked through here recently, tracking in soil.", isSupernatural: false },
       { name: "Cold Draft", description: "An unnatural breeze chills you to the bone.", isSupernatural: true }
     ],
+    garage: [
+      { name: "Rusty Wrench", description: "A large wrench with fresh, dark stains.", isSupernatural: false },
+      { name: "Car Keys", description: "Found on the ground near the driver's side door.", isSupernatural: false },
+      { name: "Whispering Wind", description: "The wind seems to whisper a name through the cracks in the walls.", isSupernatural: true }
+    ],
+    basement: [
+      { name: "Rusted Barrel", description: "One barrel has a loose lid, and a strange liquid is seeping out.", isSupernatural: false },
+      { name: "Old Rope", description: "A frayed rope with knots tied in a pattern.", isSupernatural: false },
+      { name: "Flickering Light", description: "The bulb flickers in a rhythm that seems like Morse code.", isSupernatural: true }
+    ],
     library: [
       { name: "Tattered Diary Entry", description: "Spooky ramblings mentioning shadows that move on their own.", isSupernatural: true },
       { name: "Missing Book", description: "A gap in the shelf where a book on poisons used to be.", isSupernatural: false },
       { name: "Burnt Letter", description: "Only the words 'meet me tonight' are legible.", isSupernatural: false }
-    ],
-    study: [
-      { name: "Unsent Blackmail Letter", description: "A threatening note written by Guest 1 targeting the victim's debts.", isSupernatural: false },
-      { name: "Hidden Safe", description: "The safe is wide open and empty.", isSupernatural: false },
-      { name: "Bleeding Ink", description: "The ink well seems to be filled with fresh blood.", isSupernatural: true }
     ],
     kitchen: [
       { name: "Empty Vials of Cyanide", description: "Hidden behind the rotting wooden drawers.", isSupernatural: false },
       { name: "Half-Eaten Meal", description: "Someone left in a rush.", isSupernatural: false },
       { name: "Rattling Knives", description: "The knives in the block seem to vibrate on their own.", isSupernatural: true }
     ],
-    garden: [
-      { name: "Cracked Gravestone", description: "The glowing soil surrounding it hums with eerie, otherworldly whispers.", isSupernatural: true },
-      { name: "Footprints in Dirt", description: "Leading towards the window.", isSupernatural: false },
-      { name: "Poisonous Plant", description: "A rare, toxic flower has been recently harvested.", isSupernatural: false }
+    study: [
+      { name: "Unsent Blackmail Letter", description: "A threatening note written by Guest 1 targeting the victim's debts.", isSupernatural: false },
+      { name: "Hidden Safe", description: "The safe is wide open and empty.", isSupernatural: false },
+      { name: "Bleeding Ink", description: "The ink well seems to be filled with fresh blood.", isSupernatural: true }
     ],
     dining_room: [
       { name: "Tipped Wine Glass", description: "A white residue is visible on the rim, smelling faintly of almonds.", isSupernatural: false },
       { name: "Torn Place Card", description: "Guest 2's name was crossed out violently.", isSupernatural: false },
       { name: "Cold Breath", description: "You see your breath, though the room is warm.", isSupernatural: true }
+    ],
+    room_1: [
+      { name: "Unmade Bed", description: "The sheets are messy, as if someone just got up.", isSupernatural: false },
+      { name: "Hairbrush", description: "A hairbrush with long, dark hair tangled in it.", isSupernatural: false },
+      { name: "Rocking Chair", description: "The rocking chair moves slightly on its own.", isSupernatural: true }
+    ],
+    bathroom: [
+      { name: "Broken Mirror", description: "A cracked mirror with a faint reflection of someone who isn't there.", isSupernatural: true },
+      { name: "Wet Towel", description: "A damp towel, still warm.", isSupernatural: false },
+      { name: "Medicine Cabinet", description: "An open cabinet with one bottle missing.", isSupernatural: false }
+    ],
+    conservatory: [
+      { name: "Deadly Nightshade", description: "A patch of poisonous berries, some seem to be missing.", isSupernatural: false },
+      { name: "Garden Trowel", description: "A trowel with fresh dirt on it.", isSupernatural: false },
+      { name: "Moving Vines", description: "The vines seem to reach towards you when you're not looking.", isSupernatural: true }
+    ],
+    room_2: [
+      { name: "Billiard Cue", description: "A cue stick with a peculiar scratch mark.", isSupernatural: false },
+      { name: "Scattered Balls", description: "Pool balls are all over the floor, one has a smudge of red.", isSupernatural: false },
+      { name: "Phantom Music", description: "You can hear faint, old-fashioned music coming from nowhere.", isSupernatural: true }
+    ],
+    observatory: [
+      { name: "Torn Star Chart", description: "A star chart with a specific constellation circled in red.", isSupernatural: false },
+      { name: "Telescope", description: "The telescope lens is smudged, as if someone recently looked through it.", isSupernatural: false },
+      { name: "Moving Stars", description: "You swear one of the stars is blinking in a pattern.", isSupernatural: true }
+    ],
+    room_3: [
+      { name: "Jewelry Box", description: "An open jewelry box with one necklace missing.", isSupernatural: false },
+      { name: "Old Photograph", description: "A photo of the victim with someone, the other person's face is scratched out.", isSupernatural: false },
+      { name: "Cold Spot", description: "A small area of the room that is significantly colder than the rest.", isSupernatural: true }
     ]
   };
 
